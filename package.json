@@ -1,0 +1,15 @@
+{
+  "name": "jourplaneraren",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev --env local",
+    "check": "node --check src/client.js && node --test",
+    "build": "wrangler deploy --env=\"\" --dry-run --outdir dist",
+    "deploy": "wrangler deploy --env=\"\""
+  },
+  "devDependencies": {
+    "wrangler": "4.156.0"
+  }
+}

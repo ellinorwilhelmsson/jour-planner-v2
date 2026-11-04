@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="sv">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="theme-color" content="#234f42"><title>Jourplaneraren</title><link rel="stylesheet" href="/style.css"><script type="module" src="/client.js"></script></head>
+<body>
+  <a class="skip" href="#main">Till innehållet</a>
+  <aside class="sidebar">
+    <a class="brand" href="#schema"><span class="brand-mark">j<span>•</span></span><span>Jourplaneraren<small>LITE MER TILLSAMMANS</small></span></a>
+    <div class="workspace"><span class="workspace-icon">☀</span><div>Vår förskola<small>En plats för gemensam planering</small></div></div>
+    <p class="nav-label">PLANERING</p>
+    <nav aria-label="Huvudmeny"><a href="#schema" data-view="schema"><span aria-hidden="true">▦</span> Jourschema</a><a href="#familjer" data-view="familjer"><span aria-hidden="true">♧</span> Familjer</a><a href="#stadning" data-view="stadning"><span aria-hidden="true">✧</span> Helgstädning</a></nav>
+    <div class="sidebar-note"><span class="leaf" aria-hidden="true">❧</span><strong>Små insatser.<br>Stor gemenskap.</strong><p>Här får vardagens pussel<br>en gemensam plats.</p></div>
+    <div class="profile"><span class="avatar">E</span><div><strong>Personlig inloggning</strong><small id="identity">Verifierar konto…</small></div></div><a class="logout" href="/cdn-cgi/access/logout">Logga ut ↗</a>
+  </aside>
+  <div class="shell">
+    <header class="topbar"><span>Vår förskola <span class="crumb">/</span> <span id="breadcrumb">Jourschema</span></span><span class="prototype"><i></i> Testversion</span></header>
+    <main id="main" tabindex="-1">
+      <div class="demo-banner"><span><strong>En första titt på Jourplaneraren</strong> · Alla familjer och pass är påhittade. Ändringar återställs när du laddar om.</span><button class="text-button" id="reset">Återställ demo ↺</button></div>
+      <div id="content"></div>
+      <footer>Gjort för en enklare vardag, tillsammans.<span>Jourplaneraren · Prototyp 01</span></footer>
+    </main>
+  </div>
+  <dialog id="editor" aria-labelledby="dialog-title"><form id="editor-form"><div class="dialog-top"><span class="eyebrow">TESTVERSION</span><button type="button" class="icon-button" id="close-dialog" aria-label="Stäng">×</button></div><h2 id="dialog-title"></h2><div id="dialog-fields"></div><div class="dialog-actions"><button type="button" class="button secondary" id="cancel-dialog">Avbryt</button><button class="button" type="submit">Spara ändring</button></div></form></dialog>
+  <div id="toast" role="status" aria-live="polite"></div>
+</body>
+</html>

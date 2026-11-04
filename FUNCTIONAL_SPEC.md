@@ -1,6 +1,6 @@
 # Jourplaneraren funktionsspecifikation utkast
 
-Uppdaterad 30 oktober 2026. Utkastet samlar beslut för en ny app som bevarar Jourplanerarens verksamhetslogik. Design, användarflöden och teknikval kan ändras. Beslutade regler nedan gäller som mål för den nya appen; de beskriver inte att ändringarna redan är implementerade.
+Uppdaterad 4 november 2026. Utkastet samlar beslut för en ny app som bevarar Jourplanerarens verksamhetslogik. Design, användarflöden och teknikval kan ändras. Beslutade regler nedan gäller som mål för den nya appen; de beskriver inte att ändringarna redan är implementerade.
 
 Specifikationen är ännu inte komplett. Avsnittet Befintligt underlag att granska innehåller funktioner från dagens app som återstår att beskriva och stämma av. Exakta beräkningsregler behöver också färdigställas innan hela fördelningen kan implementeras entydigt.
 
@@ -31,7 +31,7 @@ Specifikationen är ännu inte komplett. Avsnittet Befintligt underlag att grans
 - Jämn fördelning inom kalendermånaden prioriteras före historisk utjämning. Historiska skillnader ska jämnas ut gradvis.
 - När avstånd och månadsfördelning är likvärdiga prioriteras variation mellan veckodagar före historisk utjämning.
 
-Detta anger beslutade inbördes prioriteringar. En fullständig ordning, inklusive hur tredjejourens intervall och APT förhåller sig till månadsfördelningen, återstår att fastställa.
+Beslut 4 november 2026: bland tillåtna tilldelningar gäller följande prioritetsordning: 14 dagars avstånd mellan jour 1–2, månadsbalans, APT-balans, 14 dagars avstånd när jour 3 ingår, veckodagsvariation och sist historisk balans. Befrielse, frånvaro, spärrade veckodagar och ett pass per familj och dag är tillgänglighetsvillkor.
 
 ### APT
 
@@ -88,8 +88,8 @@ Exakt vilka storhelger och angränsande datum som ska ge städfri helg återstå
 - Ändringar i ett schema hör till dess schemaperiods historik. Det omfattar tilldelningar, låsningar, godkända avvikelser, jourbyten och publicering.
 - Periodens historik följer med schemat även efter arkivering.
 - Ändringar i gemensamma uppgifter, exempelvis familjeregler och städkö, ska också kunna spåras. Hur dessa knyts till berörda perioder återstår att precisera.
-- Obligatoriskt namnval innan ändringar görs tas med som en lösning att prova med det befintliga gemensamma kontot. Aktivt namn visas tydligt och kan bytas.
-- Namnvalet anger vem användaren representerar och är inte en verifierad personlig inloggning.
+- Den nya Cloudflare-appen ska använda personliga inloggningar genom Cloudflare Access: engångskod via mejl samt separat MFA med autentiseringsapp. Endast uttryckligen tillåtna mejladresser ska få åtkomst.
+- Personlig verifierad identitet ersätter det tidigare förslaget om ett gemensamt konto med manuellt namnval. GitHub används inte som inloggningsleverantör.
 
 ### Återställning
 
@@ -130,11 +130,16 @@ Följande verksamhetsområden inventerades i den tidigare genomgången. Detaljer
 
 ## Återstående beräkningsbeslut
 
-- Exakt beräkning av familjens förväntade andel med startdatum och flera befrielseperioder, inklusive förhållandet till grupper med samma start.
-- Fullständig prioritetsordning mellan intervall för jour 1 och 2, intervall som involverar tredjejour, månadsbalans, APT-balans, veckodagar samt historisk balans per nivå och totalt.
+- Historiska jämförelseperioder och normalisering av äldre statistik behöver fortfarande preciseras. För en ny schemaperiod beräknas familjens vikt som aktiva kalenderdagar minus registrerad jourbefrielse, utan kompensation för tiden före start eller under befrielse (beslut 4 november 2026). Ledighet minskar inte vikten.
 - Eventuellt krav på uttryckligt godkännande av information om korta intervall där tredjejour ingår.
 - Beräkningsgrund när äldre APT- eller befrielsehistorik saknas.
 - Exakta städfria storhelger, datumgränser, delvis stängda veckor och hur frånvaro som överlappar en del av helgen behandlas.
 - Spårbarhet och återställning för uppgifter som är gemensamma för flera schemaperioder.
 
 Detta är ett fristående kravunderlag för Jourplanner 2. Fortsatt specificering utgår från besluten och de återstående verksamhetsområdena ovan.
+
+## Första Cloudflare-prototypen
+
+Beslut 1 november 2026: börja med en klickbar prototyp med påhittade testdata för familjer, jourschema och städkö. Ändringar i denna version finns endast under det aktuella besöket och sparas inte gemensamt. Exempelschemat är inte resultatet av den färdiga fördelningsalgoritmen. Skarpa familjeuppgifter, gemensam lagring, kalenderkoppling och utskick ingår inte i prototypen.
+
+Beslut 4 november 2026: behåll den ursprungliga varmare designen. Schemat ska kunna visas som vecka, månad med kalenderrutor och hela en tremånadersperiod. En första lokal jourgenerator ska använda beslutad prioritetsordning, kunna fördela om olåsta pass och visa avvikelser. Verklig historik saknas i prototypen; äldre rättvisa kan därför inte verifieras där.
