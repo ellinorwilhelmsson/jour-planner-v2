@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { available, obligation, generateSchedule } from '../src/planner.js';
+import { available, obligation, generateSchedule, intervalCapacity, reviewSchedule, lastChildEnd, familyName } from '../src/planner.js';
 const families = Array.from({ length: 24 }, (_, i) => ({ id: i + 1, name: `Familj ${i + 1}`, status: 'Aktiv' }));
 const options = { start: '2026-11-01', end: '2027-01-31', families, levels: 3, closed: ['2026-12-25', '2027-01-01', '2027-01-06'], apt: ['2026-11-04','2026-12-02','2027-01-13'] };
 test('leave blocks dates but never reduces obligation; exemption does', () => {
@@ -48,4 +48,50 @@ test('a later primary-duty lock influences earlier interval choices', () => {
 });
 test('same input produces the same reviewable schedule', () => {
   assert.deepEqual(generateSchedule(options), generateSchedule(options));
+});
+test('capacity diagnosis proves an interval shortage without blaming individual assignments', () => {
+  const shortage=intervalCapacity({...options,families:families.slice(0,11)});
+  assert.equal(shortage.required,20);
+  assert.equal(shortage.available,11);
+  assert.equal(intervalCapacity({...options,families:families.slice(0,20)}),null);
+  assert.equal(intervalCapacity({...options,start:'2026-11-02',end:'2026-11-03',families:families.slice(0,4)}),null);
+});
+test('rechecking reflects a manual correction without changing any assignment or lock', () => {
+  const assignments={'2026-11-02:0':{family:1,locked:true},'2026-11-03:0':{family:1,locked:false}};
+  const input={...options,start:'2026-11-02',end:'2026-11-03',levels:1,assignments};
+  assert.ok(reviewSchedule(input).some(w=>w.type==='interval'));
+  assignments['2026-11-03:0']={family:2,locked:true};
+  const before=structuredClone(assignments);
+  assert.ok(!reviewSchedule(input).some(w=>w.type==='interval'));
+  assert.deepEqual(assignments,before);
+});
+test('last child end date is inclusive and reduces obligation only after departure', () => {
+  const f={id:1,name:'Björk',status:'Aktiv',childRecords:[{name:'Alva',end:'2026-11-15'}]};
+  assert.equal(available(f,'2026-11-15'),true);
+  assert.equal(available(f,'2026-11-16'),false);
+  assert.equal(obligation(f,'2026-11-01','2026-11-30'),15);
+  assert.equal(lastChildEnd(f),'2026-11-15');
+});
+test('a sibling remaining without end date keeps the household eligible', () => {
+  const f={id:1,name:'Lind',status:'Aktiv',childRecords:[{name:'Noah',end:'2026-11-15'},{name:'Vera',end:''}]};
+  assert.equal(available(f,'2027-01-15'),true);
+  assert.equal(lastChildEnd(f),null);
+  assert.equal(familyName(f),'Noah och Vera Lind');
+  assert.equal(familyName(f,'2026-11-16'),'Vera Lind');
+  f.childRecords[1].end='2026-12-15';
+  assert.equal(lastChildEnd(f),'2026-12-15');
+  assert.equal(available(f,'2026-12-16'),false);
+});
+test('departure flags existing assignments without moving them; regenerated unlocked duties exclude departed household', () => {
+  const f={...families[0],childRecords:[{name:'Alva',end:'2026-11-15'}]};
+  const existing={'2026-11-16:0':{family:f.id,locked:true},'2026-11-17:0':{family:f.id,locked:false}};
+  const input={...options,families:[f,...families.slice(1)],assignments:existing};
+  const snapshot=structuredClone(existing);
+  const warnings=reviewSchedule(input);
+  assert.equal(warnings.filter(w=>w.type==='departed').length,2);
+  assert.deepEqual(existing,snapshot);
+  const generated=generateSchedule({...input,existing});
+  assert.deepEqual(generated.assignments['2026-11-16:0'],existing['2026-11-16:0']);
+  assert.notEqual(generated.assignments['2026-11-17:0'].family,f.id);
+  assert.equal(generated.warnings.filter(w=>w.type==='departed').length,1);
 });

@@ -9,6 +9,8 @@ Specifikationen är ännu inte komplett. Avsnittet Befintligt underlag att grans
 ### Familjer och jourskyldighet
 
 - Familjen är enheten för jourfördelning.
+- Barn har individuella slutdatum. Slutdatumet är sista dagen inkluderad. Jouren upphör efter sista barnets slutdatum; finns ett syskon kvar fortsätter jourskyldigheten. Jourskyldig tid beräknas bara till och med sista dagen. Redan gjorda scheman ska visa berörda tilldelningar som avvikelser för medveten ändring; de flyttas inte automatiskt när slutdatum registreras.
+- Visningen använder barnens namn och efternamn, utan prefixet Familjen. I schemat visas barnen som är kvar på respektive datum.
 - Rättvisan ska ta hänsyn både till familjer som började samtidigt och till deras faktiska jourskyldiga tid. Familjer ska inte få extra pass för att komma ikapp tid innan de började joura.
 - Registrerad jourbefrielse räknas bort från jourskyldig tid. När befrielsen upphör får familjen sin normala andel framåt. Pass från befrielseperioden ska inte tas igen.
 - Befrielse för styrelsearbete gäller bara jour, inte helgstädning.
