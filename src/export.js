@@ -1,19 +1,20 @@
 import { zipSync, strToU8 } from 'fflate';
 import { familyName, obligation, periodDays } from './planner.js';
 import { closedDates } from './model.js';
+import { isoWeek } from './dates.js';
 export const xml=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&apos;'}[c])).replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g,'');
 export function exportSheets(state,period) {
   const name=(id,date,original=false)=>{const f=(original?period.original?.families:state.families)?.find(f=>f.id===id);return f?familyName(f,date):id?'Avslutad tilldelning':'Obemannat';};
   const closed=new Set(closedDates(period)),source=period.original??period;
   const status=period.original?'Utskickat':'UTKAST';
   const heading=[`${status} · ${period.start} – ${period.end}`];
-  const schedule=[heading,['Datum','Jour','Aktuell bemanning','Original','Låst','APT / stängt']];
+  const schedule=[heading,['Datum','Vecka','Jour','Aktuell bemanning','Original','Låst','APT / stängt']];
   for(const day of periodDays(period.start,period.end)) {
     if([0,6].includes(new Date(`${day}T00:00:00Z`).getUTCDay())) continue;
-    if(closed.has(day)||(period.levelOverrides[day]??period.levels)===0) {schedule.push([day,'','','','','Stängt']);continue;}
-    for(let l=0;l<(period.levelOverrides[day]??period.levels);l++) {const key=`${day}:${l}`,a=period.assignments[key];schedule.push([day,l+1,name(a?.family,day),period.original?name(period.original.assignments[key]?.family,day,true):'',a?.locked?'Ja':'Nej',l===0&&period.aptDates.includes(day)?'APT från 16.00':'']);}
+    if(closed.has(day)||(period.levelOverrides[day]??period.levels)===0) {schedule.push([day,isoWeek(day).week,'','','','','Stängt']);continue;}
+    for(let l=0;l<(period.levelOverrides[day]??period.levels);l++) {const key=`${day}:${l}`,a=period.assignments[key];schedule.push([day,isoWeek(day).week,l+1,name(a?.family,day),period.original?name(period.original.assignments[key]?.family,day,true):'',a?.locked?'Ja':'Nej',l===0&&period.aptDates.includes(day)?'APT från 16.00':'']);}
   }
-  const cleaning=[heading,['Helg från','Barn och efternamn','Avdelning','Typ','Orsak'],...(period.cleaning?.assignments??[]).map(a=>[a.date,name(a.family,a.date),a.department,a.extraId?'RE-extrapass':'Ordinarie',a.reason??'']),...(period.cleaning?.free??[]).map(a=>[a.date,'Städfritt','','',a.reason])];
+  const cleaning=[heading,['Helg från','Vecka','Barn och efternamn','Avdelning','Typ','Orsak'],...(period.cleaning?.assignments??[]).map(a=>[a.date,isoWeek(a.date).week,name(a.family,a.date),a.department,a.extraId?'RE-extrapass':'Ordinarie',a.reason??'']),...(period.cleaning?.free??[]).map(a=>[a.date,isoWeek(a.date).week,'Städfritt','','',a.reason])];
   const queue=[['Ordinarie städkö vid export'],['Plats','Barn och efternamn'],...state.queue.map((id,i)=>[i+1,name(id)])];
   const families=[['Familjeregler vid export'],['Barn och efternamn','Avdelning','Status','Jourstart','Jourslut','Barnstart / slut / befrielseveckor','Jourbefrielse','Ledighet','Spärrade veckodagar'],...state.families.map(f=>[familyName(f),f.group,f.status,f.start,f.end,f.childRecords.map(c=>`${c.name}: ${c.start||'–'} / ${c.end||'–'} / ${c.exemptionWeeks??4}`).join('; '),JSON.stringify(f.exemptions??[]),JSON.stringify(f.leave??[]),(f.blockedWeekdays??[]).join(', ')])];
   const stats=[heading,['Schemalagd tilldelning, inte bekräftat utfört arbete'],['Barn och efternamn','Jour 1','Jour 2','Jour 3','Totalt','APT jour 1','Jourskyldiga dagar'],...(period.original?.families??state.families).map(f=>{const keys=Object.entries(source.assignments).filter(([,a])=>a.family===f.id).map(([k])=>k);return [familyName(f),...[':0',':1',':2'].map(l=>keys.filter(k=>k.endsWith(l)).length),keys.length,keys.filter(k=>k.endsWith(':0')&&source.aptDates.includes(k.slice(0,10))).length,obligation(f,period.start,period.end)];})];

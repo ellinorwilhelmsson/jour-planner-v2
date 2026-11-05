@@ -1,6 +1,6 @@
 import { dateKey, periodDays, generateSchedule, available, intervalCapacity, reviewSchedule, lastChildEnd, familyName, obligation } from '/planner.js';
 import { closedDates as getClosedDates, periodWarnings, historyFor, weightedFamilies, warningKey } from '/model.js';
-import { addDays } from '/dates.js';
+import { addDays, isoWeek } from '/dates.js';
 import { exportSheets, makeWorkbook } from '/export.js';
 const $ = (selector) => document.querySelector(selector);
 const escape = (value) => String(value).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -30,13 +30,14 @@ function showWarningTooltip(button) {
 }
 const fmt = (date, options) => new Intl.DateTimeFormat('sv-SE', { timeZone: 'UTC', ...options }).format(date);
 const family = id => families.find(f => f.id === id);
-let workspace, revision=0, selectedPeriodId=localStorage.getItem('jourplanner-period'), busy=false;
+let workspace, revision=0, selectedPeriodId=localStorage.getItem('jourplanner-period'), busy=false, isLocalEnvironment=false;
 function currentPeriod() { return workspace?.periods.find(p=>p.id===selectedPeriodId); }
 function hydrate(response) {
   workspace=response.state;revision=response.revision;
   if(!currentPeriod()) selectedPeriodId=workspace.periods.find(p=>p.status!=='archived')?.id??workspace.periods[0]?.id;
   if(selectedPeriodId) localStorage.setItem('jourplanner-period',selectedPeriodId);
   families=workspace.families;queue=workspace.queue;
+  $('#demo-description').textContent=isLocalEnvironment?'Lokal testmiljö · Påhittade uppgifter. Ändringar sparas i lokal databas.':workspace.demoData?'Gemensam testmiljö · Påhittade familjer. Ändringar sparas i Cloudflare D1.':'Gemensam planering · Ändringar sparas i Cloudflare D1.';
   const p=currentPeriod();
   if(p) {periodStart=p.start;periodEnd=p.end;levels=p.levels;closedDates=getClosedDates(p);aptDates=p.aptDates;assignments=p.assignments;generated=p.generated;warnings=periodWarnings(workspace,p);}
   validationStale=false;
@@ -88,6 +89,7 @@ function familyLabel(f, showGroup = true) {
   return `<div class="family-name"><span class="family-initial">${escape(f.name.slice(0, 2).toUpperCase())}</span><div>${escape(familyName(f))}<small>${showGroup?escape(f.group):''}${lastChildEnd(f)?`${showGroup?' · ':''}Sista dag ${lastChildEnd(f)}`:''}</small></div></div>`;
 }
 function render() {
+  clearSlotDrag();
   hideWarningTooltip();
   const names = {schema:'Jourschema',familjer:'Familjer',stadning:'Helgstädning',statistik:'Statistik',historik:'Ändringshistorik',export:'Export'};
   renderPeriodBar();
@@ -110,28 +112,34 @@ function render() {
 function assignmentButton(date, level, compact = false) {
   const s = assignment(date, level);
   const name = s.family ? family(s.family) ? familyName(family(s.family), date) : 'Okänd tilldelning' : 'Obemannat';
-  return `<button class="slot level-${level} ${compact ? 'calendar-slot' : ''}" data-action="edit-slot" data-date="${date}" data-level="${level}" title="Jour ${level + 1}: ${escape(name)}${s.locked ? ' (låst)' : ''}" aria-label="Ändra jour ${level + 1}, ${date}, ${escape(name)}${s.locked ? ', låst' : ''}"><span>${compact ? `<small>${level + 1}</small>` : ''}${escape(name)}</span><span class="locked">${s.locked ? '◇' : compact ? '' : '↗'}</span></button>`;
+  const editable=['draft','sent'].includes(currentPeriod().status);
+  return `<button class="slot level-${level} ${compact ? 'calendar-slot' : ''}" draggable="${editable&&Boolean(s.family)}" data-slot-key="${date}:${level}" data-action="edit-slot" data-date="${date}" data-level="${level}" aria-describedby="slot-interaction-help" title="Jour ${level + 1}: ${escape(name)}${s.locked ? ' (låst)' : ''}${editable&&s.family?' · Dra till ett annat pass för att byta':''}" aria-label="Ändra jour ${level + 1}, ${date}, ${escape(name)}${s.locked ? ', låst' : ''}"><span>${compact ? `<small>${level + 1}</small>` : ''}${escape(name)}</span><span class="locked">${s.locked ? '◇' : compact ? '' : '↗'}</span></button>`;
 }
 function renderMonth(offset) {
   const month = monthDate(offset);
   const start = dateKey(month);
   const end = new Date(month); end.setUTCMonth(end.getUTCMonth() + 1, 0);
   const padding = (month.getUTCDay() + 6) % 7;
-  return `<section class="month-panel" id="period-month-${offset}" tabindex="-1" aria-label="${fmt(month, { month: 'long', year: 'numeric' })}"><h2>${fmt(month, { month: 'long', year: 'numeric' })}</h2><div class="month-scroll"><div class="calendar-weekdays">${['Mån','Tis','Ons','Tor','Fre','Lör','Sön'].map(d => `<span>${d}</span>`).join('')}</div><div class="calendar-grid">${Array.from({length: padding}, () => '<div class="calendar-padding" aria-hidden="true"></div>').join('')}${periodDays(start, dateKey(end)).map(date => {
+  const gridStart=addDays(start,-padding),cellCount=Math.ceil((padding+end.getUTCDate())/7)*7;
+  const cells=Array.from({length:cellCount},(_,i)=>{
+    const date=addDays(gridStart,i),number=isoWeek(date);
+    const weekLabel=i%7===0?`<div class="calendar-week-number" aria-label="Vecka ${number.week}, ${number.year}" title="Vecka ${number.week}, ${number.year}"><span>v.</span>${number.week}</div>`:'';
+    if(date<start||date>dateKey(end)) return weekLabel+'<div class="calendar-padding" aria-hidden="true"></div>';
     const day = new Date(`${date}T00:00:00Z`);
     const closed = isClosed(date);
     const dayWarnings = !validationStale ? warnings.filter(w => w.date === date && w.type !== 'info' && !(w.type==='interval'&&currentPeriod().approved.includes(warningKey(w)))) : [];
-    return `<div class="calendar-day ${closed ? 'closed-day' : ''}"><div class="calendar-date" data-calendar-date="${date}"><time datetime="${date}">${day.getUTCDate()}</time>${aptDates.includes(date) ? '<span class="apt">APT</span>' : ''}${dayWarnings.length ? `<button type="button" class="day-warning" data-action="show-warnings" data-date="${date}" aria-describedby="warning-tooltip" aria-label="Visa ${dayWarnings.length} ${dayWarnings.length===1?'varning':'varningar'} för ${date}">!</button>` : ''}</div>${closed ? `<span class="closed-label">${closedDates.includes(date) ? 'Stängt' : 'Helg'}</span>` : Array.from({length: levelsOn(date)}, (_,level) => assignmentButton(date,level,true)).join('')}</div>`;
-  }).join('')}</div></div></section>`;
+    return weekLabel+`<div class="calendar-day ${closed ? 'closed-day' : ''}"><div class="calendar-date" data-calendar-date="${date}"><time datetime="${date}">${day.getUTCDate()}</time>${aptDates.includes(date) ? '<span class="apt">APT</span>' : ''}${dayWarnings.length ? `<button type="button" class="day-warning" data-action="show-warnings" data-date="${date}" aria-describedby="warning-tooltip" aria-label="Visa ${dayWarnings.length} ${dayWarnings.length===1?'varning':'varningar'} för ${date}">!</button>` : ''}</div>${closed ? `<span class="closed-label">${closedDates.includes(date) ? 'Stängt' : 'Helg'}</span>` : Array.from({length: levelsOn(date)}, (_,level) => assignmentButton(date,level,true)).join('')}</div>`;
+  }).join('');
+  return `<section class="month-panel" id="period-month-${offset}" tabindex="-1" aria-label="${fmt(month,{month:'long',year:'numeric'})}"><h2>${fmt(month,{month:'long',year:'numeric'})}</h2><div class="month-scroll"><div class="calendar-weekdays"><span aria-label="Veckonummer">v.</span>${['Mån','Tis','Ons','Tor','Fre','Lör','Sön'].map(d=>`<span>${d}</span>`).join('')}</div><div class="calendar-grid">${cells}</div></div></section>`;
 }
 function renderSchedule() {
 
   const locked = Object.values(assignments).filter(s => s.locked).length;
   $('#content').innerHTML = heading('PLANERING', 'Jourschema', `${periodLabel()} · ${currentPeriod().status==='draft'?'Utkast':currentPeriod().status==='sent'?'Utskickat':'Arkiverat'}`, currentPeriod().status==='draft'?'<button class="button" data-action="generate">Generera schema</button>':'') +
     `<div class="schedule-tools"><div class="view-switch" role="group" aria-label="Schemavy">${[['week','Vecka'],['month','Månad'],['period','3 månader']].map(([mode,label]) => `<button class="${calendarMode === mode ? 'selected' : ''}" data-action="calendar-view" data-mode="${mode}" aria-pressed="${calendarMode === mode}">${label}</button>`).join('')}</div><div class="schedule-facts"><span>${families.length} familjer</span><span>${locked} låsta pass</span><button class="text-button" data-action="period-settings">Period och datum ↗</button></div></div>
-    <div class="schedule-toolbar"><span>${calendarMode === 'period' ? 'Hela schemaperioden' : calendarMode === 'month' ? fmt(monthDate(monthOffset), {month:'long',year:'numeric'}) : `${fmt(days()[0],{day:'numeric',month:'long'})}–${fmt(days()[4],{day:'numeric',month:'long'})}`}</span>${calendarMode !== 'period' ? `<div class="week-nav"><button class="icon-button" data-action="calendar-prev" aria-label="Föregående ${calendarMode === 'month' ? 'månad' : 'vecka'}" ${(calendarMode === 'month' ? monthOffset === 0 : week === 0) ? 'disabled' : ''}>‹</button><button class="icon-button" data-action="calendar-next" aria-label="Nästa ${calendarMode === 'month' ? 'månad' : 'vecka'}" ${(calendarMode === 'month' ? monthOffset === 2 : new Date(days()[0].getTime()+7*86400000) > new Date(`${periodEnd}T00:00:00Z`)) ? 'disabled' : ''}>›</button></div>` : ''}</div>
+    <div class="schedule-toolbar"><span>${calendarMode === 'period' ? 'Hela schemaperioden' : calendarMode === 'month' ? fmt(monthDate(monthOffset), {month:'long',year:'numeric'}) : `Vecka ${isoWeek(dateKey(days()[0])).week} · ${fmt(days()[0],{day:'numeric',month:'long'})}–${fmt(days()[4],{day:'numeric',month:'long'})}`}</span>${calendarMode !== 'period' ? `<div class="week-nav"><button class="icon-button" data-action="calendar-prev" aria-label="Föregående ${calendarMode === 'month' ? 'månad' : 'vecka'}" ${(calendarMode === 'month' ? monthOffset === 0 : week === 0) ? 'disabled' : ''}>‹</button><button class="icon-button" data-action="calendar-next" aria-label="Nästa ${calendarMode === 'month' ? 'månad' : 'vecka'}" ${(calendarMode === 'month' ? monthOffset === 2 : new Date(days()[0].getTime()+7*86400000) > new Date(`${periodEnd}T00:00:00Z`)) ? 'disabled' : ''}>›</button></div>` : ''}</div>
     ${calendarMode === 'week' ? `<section class="panel" aria-label="Veckans jourschema"><div class="table-wrap"><table><thead><tr><th>DAG</th>${Array.from({length:levels},(_,l)=>`<th>JOUR ${l+1}</th>`).join('')}</tr></thead><tbody>${days().map(date => {const key=dateKey(date);return `<tr><td>${fmt(date,{weekday:'long',day:'numeric',month:'short'})}${aptDates.includes(key)?'<span class="apt">APT</span>':''}</td>${Array.from({length:levels},(_,l)=>`<td>${isClosed(key)?'Stängt':l>=levelsOn(key)?'—':assignmentButton(key,l)}</td>`).join('')}</tr>`;}).join('')}</tbody></table></div></section>` : `${calendarMode === 'period' ? `<nav class="period-nav" aria-label="Gå till månad"><span>Gå till månad</span>${[0,1,2].map(offset => `<button data-action="jump-month" data-month="${offset}">${fmt(monthDate(offset),{month:'long',year:'numeric'})}</button>`).join('')}</nav>` : ''}<div class="month-overview ${calendarMode === 'period' ? 'three-months' : ''}">${calendarMode === 'period' ? [0,1,2].map(renderMonth).join('') : renderMonth(monthOffset)}</div>`}
-    <div class="panel-foot calendar-legend"><div class="legend"><span><i></i>Jour 1</span><span><i class="gold"></i>Jour 2</span>${levels === 3 ? '<span><i class="clay"></i>Jour 3</span>' : ''}<span>◇ Låst pass</span></div><span>Klicka på ett pass för att ändra det.</span></div>
+    <div class="panel-foot calendar-legend"><div class="legend"><span><i></i>Jour 1</span><span><i class="gold"></i>Jour 2</span>${levels === 3 ? '<span><i class="clay"></i>Jour 3</span>' : ''}<span>◇ Låst pass</span></div><span id="slot-interaction-help">Dra ett bemannat pass till ett annat för att byta. Du kan också öppna passet och välja ett byte.</span></div>
     ${inactivePasses()}${renderReview()}`;
 }
 function renderReview() {
@@ -166,7 +174,7 @@ function confirmGeneration() {
 }
 
 function renderFamilies() {
-  $('#content').innerHTML = heading('REGISTER', 'Familjer', 'En enkel överblick över familjer, barn och jourskyldighet.', '<button class="button" data-action="add-family">+ &nbsp; Lägg till familj</button>') +
+  $('#content').innerHTML = heading('REGISTER', 'Familjer', 'En enkel överblick över familjer, barn och jourskyldighet.', `<div class="heading-actions"><button class="button secondary" data-action="departments">Avdelningar</button><button class="button" data-action="add-family">+ Lägg till familj</button>${families.length===0?'<button class="button secondary" data-action="seed-demo">Lägg till 40 testfamiljer</button>':''}</div>`) +
     `<div class="stats">${stat('Familjer', families.length, 'I registret', '♧')}${stat('Aktiva i jouren', families.filter(f => f.status === 'Aktiv').length, 'Familjer utan jourbefrielse', '▦')}${stat('Jourbefriade', families.filter(f => f.status === 'Jourbefriad').length, 'Behåller sin plats i städkön', '◇')}</div>
     <section class="panel"><div class="panel-head"><div><h2>Familjeregister</h2><p>Uppgifterna sparas gemensamt.</p></div><input class="search" id="family-search" type="search" placeholder="Sök familj eller barn…" aria-label="Sök familj eller barn"></div><div class="table-wrap"><table><thead><tr><th scope="col">FAMILJ</th><th scope="col">AVDELNING</th><th scope="col">JOURSTATUS</th><th scope="col"><span class="eyebrow">ÄNDRA</span></th></tr></thead><tbody id="family-rows"></tbody></table></div><div class="panel-foot">Ändra familjeregler och välj sedan Generera schema för att fördela om olåsta pass.</div></section>`;
   renderFamilyRows('');
@@ -189,8 +197,46 @@ function editSlot(date,level) {
   if(currentPeriod().status==='archived') {toast('Återöppna perioden för att registrera ändringar.');return;}
   if(currentPeriod().status==='sent') return editSwap(`${date}:${level}`);
   const s=assignment(date,level);
-  openDialog(`Jour ${level+1} · ${date}`,`<label>Barn och efternamn<select name="family"><option value="">Obemannat</option>${families.map(f=>`<option value="${f.id}" ${f.id===s.family?'selected':''}>${escape(familyName(f,date))}</option>`).join('')}</select></label><label class="check-label"><input type="checkbox" name="locked" ${s.locked?'checked':''}> Lås passet</label><p>Ändrad tilldelning låses automatiskt.</p>`,async form=>{const d=new FormData(form);await sendCommand('period.assign',{periodId:selectedPeriodId,key:`${date}:${level}`,family:d.get('family')?Number(d.get('family')):null,locked:d.has('locked')});toast('Passet sparades.');});
+  const key=`${date}:${level}`,periodId=selectedPeriodId;
+  openDialog(`Jour ${level+1} · ${date}`,`<label for="slot-family">Barn och efternamn</label><select id="slot-family" name="family"><option value="">Obemannat</option>${families.map(f=>`<option value="${f.id}" ${f.id===s.family?'selected':''}>${escape(familyName(f,date))}</option>`).join('')}</select><label class="check-label"><input type="checkbox" name="locked" ${s.locked?'checked':''}> Lås passet</label><p>Ändrad tilldelning låses automatiskt.</p><label for="draft-swap">Eller byt med ett annat pass</label><select id="draft-swap" name="otherKey"><option value="">Ändra bara detta pass</option>${exchangeOptions(key)}</select><p>Vid byte flyttas båda tilldelningarna och båda passen låses.</p>`,async form=>{const d=new FormData(form);if(d.get('otherKey')) await sendCommand('period.swap',{periodId,key,otherKey:d.get('otherKey')});else await sendCommand('period.assign',{periodId,key,family:d.get('family')?Number(d.get('family')):null,locked:d.has('locked')});toast(d.get('otherKey')?'Passen är bytta och låsta.':'Passet sparades.');});
 }
+function exchangeOptions(exclude) {
+  return periodDays(periodStart,periodEnd).filter(day=>!isClosed(day)).flatMap(day=>Array.from({length:levelsOn(day)},(_,level)=>`${day}:${level}`)).filter(key=>key!==exclude).map(key=>`<option value="${key}">${key.slice(0,10)} · Jour ${Number(key.split(':')[1])+1} · ${escape(slotName(key))}</option>`).join('');
+}
+function slotName(key) {const a=assignments[key],f=family(a?.family);return f?familyName(f,key.slice(0,10)):'Obemannat';}
+async function exchangeSlots(key,otherKey) {
+  const p=currentPeriod();if(busy||dialog.open||!p||!['draft','sent'].includes(p.status)||key===otherKey) return;
+  if(p.status==='draft') {await sendCommand('period.swap',{periodId:p.id,key,otherKey});toast('Passen är bytta och låsta.');return;}
+  const reviewedRevision=revision;
+  openDialog('Registrera jourbyte',`<p><strong>${escape(slotName(key))}</strong>: ${key.slice(0,10)} jour ${Number(key.split(':')[1])+1} → ${otherKey.slice(0,10)} jour ${Number(otherKey.split(':')[1])+1}</p><p><strong>${escape(slotName(otherKey))}</strong> flyttas åt motsatt håll.</p><label for="swap-reason">Orsak till bytet</label><input id="swap-reason" name="reason" required maxlength="160"><p>Originalschemat och rättvisestatistiken behålls. Ingen kalender publiceras automatiskt.</p>`,async form=>{if(revision!==reviewedRevision) throw new Error('Underlaget har ändrats. Stäng dialogen och gör bytet igen.');await sendCommand('period.swap',{periodId:p.id,key,otherKey,reason:new FormData(form).get('reason')});toast('Jourbytet är sparat.');});
+}
+let slotDrag=null,ignoreSlotClickUntil=0;
+function clearSlotDrag() {
+  slotDrag=null;
+  document.querySelectorAll('.slot-dragging,.slot-drop-target').forEach(el=>el.classList.remove('slot-dragging','slot-drop-target'));
+}
+$('#content').addEventListener('dragstart',event=>{
+  const button=event.target.closest('[data-slot-key][draggable="true"]');
+  if(!button||busy||dialog.open) {event.preventDefault();return;}
+  slotDrag={key:button.dataset.slotKey,periodId:selectedPeriodId,revision};
+  event.dataTransfer.effectAllowed='move';event.dataTransfer.setData('text/plain',slotDrag.key);button.classList.add('slot-dragging');hideWarningTooltip();
+});
+$('#content').addEventListener('dragover',event=>{
+  const button=event.target.closest('[data-slot-key]');
+  if(!slotDrag||busy||slotDrag.periodId!==selectedPeriodId||slotDrag.revision!==revision||!button||button.dataset.slotKey===slotDrag.key) return;
+  event.preventDefault();event.dataTransfer.dropEffect='move';
+  document.querySelectorAll('.slot-drop-target').forEach(el=>{if(el!==button) el.classList.remove('slot-drop-target');});button.classList.add('slot-drop-target');
+});
+$('#content').addEventListener('dragleave',event=>{
+  const button=event.target.closest('[data-slot-key]');if(button&&(!event.relatedTarget||!button.contains(event.relatedTarget))) button.classList.remove('slot-drop-target');
+});
+$('#content').addEventListener('drop',async event=>{
+  const button=event.target.closest('[data-slot-key]'),drag=slotDrag;clearSlotDrag();
+  if(!drag||!button||drag.periodId!==selectedPeriodId||drag.revision!==revision) return;
+  event.preventDefault();ignoreSlotClickUntil=performance.now()+350;
+  try {await exchangeSlots(drag.key,button.dataset.slotKey);} catch(error) {toast(error.message);}
+});
+$('#content').addEventListener('dragend',clearSlotDrag);
 
 let childFieldId=0;
 function childRow(child,index,removable=false) {
@@ -205,9 +251,9 @@ $('#editor-form').addEventListener('click',event=>{
   const remove=event.target.closest('[data-remove-child]');if(remove) remove.closest('.child-row').remove();
 });
 function editFamily(id) {
-  const f = id ? family(id) : { name: '', children: '', childRecords: [{name:'',end:''}], group: 'Ekorren', status: 'Aktiv' };
+  const f = id ? family(id) : { name: '', children: '', childRecords: [{name:'',end:''}], group: workspace.cleaningSettings.departments[0]??'', status: 'Aktiv' };
   openDialog(id ? familyName(f) : 'Lägg till familj',
-    `<p>Ändringar sparas gemensamt och registreras i ändringshistoriken.</p><label for="family-name">Efternamn</label><input id="family-name" name="name" value="${escape(f.name)}" maxlength="40" required><fieldset class="children-editor"><legend>Barn</legend><div id="child-rows">${f.childRecords.map((child,index)=>childRow(child,index)).join('')}</div><button type="button" class="text-button" id="add-child">+ Lägg till barn</button><p>Slutdatum är barnets sista dag. Jouren upphör efter att sista barnet har slutat. Tomt slutdatum betyder att barnet är kvar. Startdatum ger fyra veckors befrielse för jour och städning som förslag. Ändra antalet veckor, eller välj 0 för ingen befrielse.</p></fieldset><label for="group">Avdelning</label><input id="group" name="group" value="${escape(f.group)}" maxlength="60" list="departments"><datalist id="departments">${workspace.cleaningSettings.departments.map(name=>`<option value="${escape(name)}"></option>`).join('')}</datalist><label for="status">Jourstatus</label><select id="status" name="status"><option ${f.status === 'Aktiv' ? 'selected' : ''}>Aktiv</option><option ${f.status === 'Jourbefriad' ? 'selected' : ''}>Jourbefriad</option></select><details class="family-rules"><summary>Regler för jourfördelning</summary><div class="family-rule-grid"><div><label for="active-start">Jourstart (valfri)</label><input id="active-start" type="date" name="start" value="${f.start??''}"></div><div><label for="active-end">Jourens slutdatum (valfritt)</label><input id="active-end" type="date" name="end" value="${f.end??''}"></div><div><label for="exempt-start">Jourbefrielse från</label><input id="exempt-start" type="date" name="exemptStart" value="${f.exemptions?.[0]?.start??''}"></div><div><label for="exempt-end">Jourbefrielse till</label><input id="exempt-end" type="date" name="exemptEnd" value="${f.exemptions?.[0]?.end??''}"></div><div><label for="leave-start">Ledighet från</label><input id="leave-start" type="date" name="leaveStart" value="${f.leave?.[0]?.start??''}"></div><div><label for="leave-end">Ledighet till</label><input id="leave-end" type="date" name="leaveEnd" value="${f.leave?.[0]?.end??''}"></div></div><label for="blocked-days">Spärrade veckodagar</label><select id="blocked-days" name="blocked" multiple size="5">${['Måndag','Tisdag','Onsdag','Torsdag','Fredag'].map((d,i)=>`<option value="${i+1}" ${(f.blockedWeekdays??[]).includes(i+1)?'selected':''}>${d}</option>`).join('')}</select><p>Ledighet blockerar datum utan att minska jourandelen. Daterad jourbefrielse minskar andelen. Ange fler intervall nedan vid behov.</p><label>Fler jourbefrielseperioder (från till per rad)<textarea name="moreExempt">${escape(rangeText((f.exemptions??[]).slice(1)))}</textarea></label><label>Fler ledighetsperioder (från till per rad)<textarea name="moreLeave">${escape(rangeText((f.leave??[]).slice(1)))}</textarea></label></details><p id="family-error" role="alert"></p>`, async form => {
+    `<p>Ändringar sparas gemensamt och registreras i ändringshistoriken.</p><label for="family-name">Efternamn</label><input id="family-name" name="name" value="${escape(f.name)}" maxlength="40" required><fieldset class="children-editor"><legend>Barn</legend><div id="child-rows">${f.childRecords.map((child,index)=>childRow(child,index)).join('')}</div><button type="button" class="text-button" id="add-child">+ Lägg till barn</button><p>Slutdatum är barnets sista dag. Jouren upphör efter att sista barnet har slutat. Tomt slutdatum betyder att barnet är kvar. Startdatum ger fyra veckors befrielse för jour och städning som förslag. Ändra antalet veckor, eller välj 0 för ingen befrielse.</p></fieldset><label for="group">Avdelning</label><select id="group" name="group">${[...new Set([...workspace.cleaningSettings.departments,...(f.group?[f.group]:[])])].map(name=>`<option value="${escape(name)}" ${name===f.group?'selected':''}>${escape(name)}</option>`).join('')}</select><label for="status">Jourstatus</label><select id="status" name="status"><option ${f.status === 'Aktiv' ? 'selected' : ''}>Aktiv</option><option ${f.status === 'Jourbefriad' ? 'selected' : ''}>Jourbefriad</option></select><details class="family-rules"><summary>Regler för jourfördelning</summary><div class="family-rule-grid"><div><label for="active-start">Jourstart (valfri)</label><input id="active-start" type="date" name="start" value="${f.start??''}"></div><div><label for="active-end">Jourens slutdatum (valfritt)</label><input id="active-end" type="date" name="end" value="${f.end??''}"></div><div><label for="exempt-start">Jourbefrielse från</label><input id="exempt-start" type="date" name="exemptStart" value="${f.exemptions?.[0]?.start??''}"></div><div><label for="exempt-end">Jourbefrielse till</label><input id="exempt-end" type="date" name="exemptEnd" value="${f.exemptions?.[0]?.end??''}"></div><div><label for="leave-start">Ledighet från</label><input id="leave-start" type="date" name="leaveStart" value="${f.leave?.[0]?.start??''}"></div><div><label for="leave-end">Ledighet till</label><input id="leave-end" type="date" name="leaveEnd" value="${f.leave?.[0]?.end??''}"></div></div><label for="blocked-days">Spärrade veckodagar</label><select id="blocked-days" name="blocked" multiple size="5">${['Måndag','Tisdag','Onsdag','Torsdag','Fredag'].map((d,i)=>`<option value="${i+1}" ${(f.blockedWeekdays??[]).includes(i+1)?'selected':''}>${d}</option>`).join('')}</select><p>Ledighet blockerar datum utan att minska jourandelen. Daterad jourbefrielse minskar andelen. Ange fler intervall nedan vid behov.</p><label>Fler jourbefrielseperioder (från till per rad)<textarea name="moreExempt">${escape(rangeText((f.exemptions??[]).slice(1)))}</textarea></label><label>Fler ledighetsperioder (från till per rad)<textarea name="moreLeave">${escape(rangeText((f.leave??[]).slice(1)))}</textarea></label></details><p id="family-error" role="alert"></p>`, async form => {
       const formData=new FormData(form);
       const data = Object.fromEntries(formData);
       for (const [a,b] of [['start','end'],['exemptStart','exemptEnd'],['leaveStart','leaveEnd']]) {
@@ -232,6 +278,7 @@ $('#content').addEventListener('click', async event => {
   const button = event.target.closest('[data-action]');
   if (!button) return;
   const { action, date, level, id, mode } = button.dataset;
+  if(action==='edit-slot'&&performance.now()<ignoreSlotClickUntil) return;
   if (action === 'prev-week' || action === 'next-week') { week += action === 'next-week' ? 1 : -1; render(); }
   if (action === 'edit-slot') editSlot(date, Number(level));
   if (action === 'calendar-view') { calendarMode=mode;render(); }
@@ -275,7 +322,7 @@ $('#reset').addEventListener('click',()=>loadWorkspace().catch(error=>toast(erro
 window.addEventListener('hashchange',()=>{if(workspace) render();});
 week=0;
 async function boot() {
-  try {const response=await fetch('/api/me');if(!response.ok) throw new Error('Inloggningen kunde inte verifieras.');const user=await response.json();$('#identity').textContent=user.email;$('#demo-description').textContent=user.local?'Lokal testmiljö · Påhittade uppgifter. Ändringar sparas i lokal databas.':'Gemensam planering · Ändringar sparas i Cloudflare D1.';await loadWorkspace();}
+  try {const response=await fetch('/api/me');if(!response.ok) throw new Error('Inloggningen kunde inte verifieras.');const user=await response.json();isLocalEnvironment=user.local;$('#identity').textContent=user.email;await loadWorkspace();}
   catch(error) {$('#save-status').textContent='Kunde inte hämta';$('#content').textContent=error.message;}
 }
 window.addEventListener('focus',async()=>{if(!workspace||busy||dialog.open) return;try {const response=await fetch('/api/revision');if(response.ok&&(await response.json()).revision!==revision) await loadWorkspace();} catch {$('#save-status').textContent='Anslutningen kunde inte kontrolleras';}});
@@ -309,6 +356,9 @@ function cleaningSettings() {
   const c=workspace.cleaningSettings;
   openDialog('Städregler och RE-dagar',`<label>Höstens RE-dag<input type="date" name="autumnRE" value="${c.autumnRE}" required></label><label>Vårens RE-dag<input type="date" name="springRE" value="${c.springRE}" required></label><label>Övriga RE-datum (komma emellan)<input name="reDates" value="${c.reDates.join(', ')}"></label><label>Jullov och stängningsperioder (från till orsak)<textarea name="breaks">${escape(rangeText(c.breaks))}</textarea></label><label>Inställda helger (lördagens datum, komma emellan)<input name="cancelled" value="${c.cancelled.join(', ')}"></label><label>Avdelningar i rotationsordning (komma emellan)<input name="departments" value="${escape(c.departments.join(', '))}"></label><p>Städfria helger: RE-helger, fredag–måndag med röd dag eller afton, lov och helgen efter en helt stängd vardagsvecka. Ändrade regler flyttar inga redan sparade uppdrag.</p>`,async form=>{const d=Object.fromEntries(new FormData(form));await sendCommand('cleaning.settings',{settings:{...c,...d,reDates:comma(d.reDates),breaks:parseRanges(d.breaks),cancelled:comma(d.cancelled),departments:comma(d.departments)}});});
 }
+function editDepartments() {
+  openDialog('Avdelningar',`<label for="department-names">Avdelningsnamn, separerade med komma</label><input id="department-names" name="departments" value="${escape(workspace.cleaningSettings.departments.join(', '))}" required><p>Ordningen används även när nya städplaner fördelas. Befintliga barns avdelning och fastställda scheman ändras inte automatiskt.</p>`,form=>sendCommand('departments.set',{departments:comma(new FormData(form).get('departments'))}));
+}
 function addExtra() {
   openDialog('Extra städtur efter missad RE-dag',`<label>Barn och efternamn<select name="family">${families.map(f=>`<option value="${f.id}">${escape(familyName(f))}</option>`).join('')}</select></label><label>Missad RE-dag<input name="reDate" type="date" required></label><label>Orsak<input name="reason" required maxlength="500"></label><p>Extrapasset får förtur. Den ordinarie köplatsen behålls.</p>`,async form=>{const d=Object.fromEntries(new FormData(form));await sendCommand('cleaning.settings',{settings:{...workspace.cleaningSettings,extras:[...workspace.cleaningSettings.extras,{...d,family:Number(d.family)}]}});});
 }
@@ -329,6 +379,7 @@ function historyFields(value) {
   const name=id=>family(id)?familyName(family(id)):'Obemannat';
   const range=rows=>(rows??[]).map(r=>`${r.start} – ${r.end}${r.reason?' · '+r.reason:''}`).join('; ');
   if(Array.isArray(value)) return Object.fromEntries(value.map((id,i)=>[`Köplats ${i+1}`,name(id)]));
+  if(value.families) return {Familjer:value.families.length,Jourskyldiga:value.families.filter(f=>f.status==='Aktiv').length,Jourbefriade:value.families.filter(f=>f.status==='Jourbefriad').length,'Spärrade fredagar':value.families.filter(f=>f.blockedWeekdays?.includes(5)).length,Avdelningar:value.cleaningSettings?.departments.join(', ')};
   if(value.assignments) return {
     Period:`${value.start} – ${value.end}`,Status:({draft:'Utkast',sent:'Utskickat',archived:'Arkiverat'})[value.status],
     Journivåer:value.levels,'APT-datum':value.aptDates.join(', '),'Stängda datum':value.closedDates.join(', '),'Stängningsperioder':range(value.closures),'Avvikande jourantal':Object.entries(value.levelOverrides).map(([d,n])=>`${d}: ${n}`).join('; '),
@@ -365,6 +416,8 @@ function renderExports() {
 }
 async function extraAction(button) {
   const {action,id,date}=button.dataset,p=currentPeriod();
+  if(action==='departments') editDepartments();
+  if(action==='seed-demo') openDialog('Lägg till testfamiljer','<p>Lägg in 40 påhittade familjer i det tomma registret: 35 jourskyldiga, 5 jourbefriade och 7 med spärrade fredagar. Barnen fördelas mellan Körsbäret, Päronet och Äpplet.</p>',async()=>{await sendCommand('demo.seed');toast('40 testfamiljer är sparade. Generera ett schema för att testa fördelningen.');});
   if(action==='approve') openDialog('Godkänn granskade intervall',`<p>Du godkänner ${warnings.filter(w=>['interval','info'].includes(w.type)).length} intervallavvikelser i det aktuella utkastet. Obemannade och otillåtna pass måste rättas.</p>`,()=>sendCommand('period.approve',{periodId:p.id,keys:warnings.filter(w=>['interval','info'].includes(w.type)).map(warningKey)}));
   if(action==='send') openDialog('Markera som utskickat','<p>Originalfördelningen fastställs och städkön flyttas enligt städplanen. Senare ändringar registreras som jourbyten. Appen skickar inget mejl.</p>',()=>sendCommand('period.send',{periodId:p.id}));
   if(action==='cleaning-generate') await sendCommand('cleaning.generate',{periodId:p.id});

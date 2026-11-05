@@ -161,3 +161,11 @@ För denna version är återställningen begränsad till periodens utkast. Gemen
 En inställd framtida städhelg i senast fastställda städperiod flyttar uppdrag inom perioden; uppdrag som inte får plats får förtur i nästa period och förbrukar inte en ny ordinarie tur. Automatisk flytt genom flera redan fastställda perioder stöds ännu inte. Full läsårsstatistik och äldre import återstår också. Detta implementationsläge ersätter inte kvarvarande specifikationsfrågor ovan.
 
 Skarpa familjeuppgifter ska vänta tills appens separata MFA-krav har slutförts och verifierats. Den registrerade autentiseringsappen bevisar inte i sig att MFA krävs för varje inloggning till appen.
+
+
+## Beslut 5 november 2026: byten, avdelningar och testunderlag
+
+- Jourpass ska kunna dras och släppas på ett annat pass för att byta tilldelning. I utkast byts och låses båda passen samtidigt. I utskickade perioder registreras bytet med orsak och bibehållet original. Båda nya tilldelningarna måste följa tillgänglighetsreglerna; ingen familj får dubbelbokas. Ett bemannat utkastpass kan flyttas till en obemannad plats, varvid den ursprungliga platsen blir obemannad och låst. Passdialogen erbjuder samma byte utan dragning.
+- Avdelningarna heter Körsbäret, Päronet och Äpplet.
+- Testunderlaget ska innehålla cirka 40 familjer: 35 jourskyldiga och 5 jourbefriade. Några jourskyldiga ska ha fredagar spärrade. Det nya påhittade underlaget har 48 olika barn, 40 familjer och 7 familjer med fredagsspärr. Befintliga familjer ska inte skrivas över av testinläggningen.
+- Veckonummer ska finnas i schemat. Visning och export använder ISO-veckonummer, med korrekt veckoår vid årsskiftet.

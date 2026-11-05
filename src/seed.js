@@ -1,15 +1,9 @@
-export const demoFamilies = [
-  { id: 1, name: 'Björk', children: 'Alva', group: 'Ekorren', status: 'Aktiv' },
-  { id: 2, name: 'Lind', children: 'Noah och Vera', group: 'Ekorren', status: 'Aktiv' },
-  { id: 3, name: 'Ek', children: 'Elias', group: 'Ugglan', status: 'Aktiv' },
-  { id: 4, name: 'Asp', children: 'Maja', group: 'Ekorren', status: 'Aktiv' },
-  { id: 5, name: 'Alm', children: 'Leo', group: 'Ugglan', status: 'Aktiv' },
-  { id: 6, name: 'Rönn', children: 'Ella', group: 'Ugglan', status: 'Aktiv' },
-  { id: 7, name: 'Hassel', children: 'Sam', group: 'Ekorren', status: 'Jourbefriad' },
-  { id: 8, name: 'Lönn', children: 'Iris', group: 'Ugglan', status: 'Aktiv' },
-  { id: 9, name: 'Gran', children: 'Otto', group: 'Ekorren', status: 'Aktiv' },
-  { id: 10, name: 'Tall', children: 'Lilly', group: 'Ugglan', status: 'Aktiv' },
-  { id: 11, name: 'Sälg', children: 'Milo', group: 'Ugglan', status: 'Aktiv' },
-  { id: 12, name: 'Vide', children: 'Freja', group: 'Ekorren', status: 'Aktiv' }
-];
-for (const f of demoFamilies) f.childRecords=f.children.split(' och ').map(name=>({name,end:''}));
+export const defaultDepartments=['Körsbäret','Päronet','Äpplet'];
+const names=['Alva','Noah','Elias','Maja','Leo','Ella','Sam','Iris','Otto','Lilly','Milo','Freja','Elsa','Hugo','Astrid','Nils','Selma','Adam','Signe','Isak','Alice','Axel','Saga','Alfred','Vera','Olle','Ebba','Liam','Ines','Theo','Agnes','Vidar','Ester','Oscar','Siri','Arvid','Liv','Felix','Edith','Vilgot'];
+const surnames=['Björk','Lind','Ek','Asp','Alm','Rönn','Hassel','Lönn','Gran','Tall','Sälg','Vide','Berg','Dahl','Lund','Holm','Strand','Nyberg','Sjöberg','Sand','Lindberg','Ekström','Bergman','Fors','Westin','Åberg','Norén','Sund','Hedin','Rosén','Hall','Blom','Vik','Eng','Löf','Hult','Sjölin','Broman','Lidén','Falk'];
+const siblings=['Lova','Malte','Meja','Ture','Lo','Ebbe','Minna','Sixten'];
+// Fictional households: stable names make manual testing and history easy to follow.
+export const demoFamilies=names.map((name,index)=>{
+  const childRecords=[name,...(index%5===0?[siblings[Math.floor(index/5)]]:[])].map(name=>({name,start:'',end:'',exemptionWeeks:4}));
+  return {id:index+1,name:surnames[index],children:new Intl.ListFormat('sv',{type:'conjunction'}).format(childRecords.map(c=>c.name)),childRecords,group:defaultDepartments[index%3],status:index<35?'Aktiv':'Jourbefriad',blockedWeekdays:index<35&&index%5===0?[5]:[],demo:true};
+});

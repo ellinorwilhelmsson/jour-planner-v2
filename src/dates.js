@@ -2,6 +2,11 @@ export const isoDate = date => date.toISOString().slice(0, 10);
 export const utcDate = value => new Date(`${value}T00:00:00Z`);
 export const addDays = (value, count) => { const date=utcDate(value);date.setUTCDate(date.getUTCDate()+count);return isoDate(date); };
 export const validDate = value => typeof value==='string' && /^\d{4}-\d{2}-\d{2}$/.test(value) && Number.isFinite(Date.parse(value)) && isoDate(utcDate(value))===value;
+export function isoWeek(value) {
+  const thursday=utcDate(value);thursday.setUTCDate(thursday.getUTCDate()+4-(thursday.getUTCDay()||7));
+  const year=thursday.getUTCFullYear(),first=new Date(Date.UTC(year,0,1));
+  return {year,week:Math.ceil(((thursday-first)/86400000+1)/7)};
+}
 export const within = (date, ranges=[]) => ranges.some(range=>date>=range.start&&date<=range.end);
 export function datesBetween(start,end) {
   const result=[];for(let date=start;date<=end;date=addDays(date,1)) result.push(date);return result;

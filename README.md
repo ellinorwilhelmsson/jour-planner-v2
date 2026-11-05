@@ -32,6 +32,8 @@ Tester omfattar autentisering, hårda schemavillkor, låsningar, barnstart och s
 - Ett litet gemensamt JSON-underlag lagras i en D1-rad. Uppdatering och historikhändelse skrivs atomiskt. Varje sparning kräver aktuell revision; en konflikt skriver aldrig över en senare ändring. Historiken innehåller serververifierad aktör, tid samt före- och eftervärden.
 - Perioder omfattar tre månader och kan skapas, väljas och arkiveras. Datumregler stödjer två/tre jourer, avvikande jourantal, svenska röda dagar/aftnar, stängningar och APT. Utskick kräver ett giltigt APT-datum per öppen månad och rättade hårda fel. Intervallavvikelser godkänns uttryckligen.
 - Manuella jourändringar låses. Olåsta pass fördelas bara om genom uttrycklig generering. Även låsta pass som blivit inaktiva kan tas bort uttryckligen med spårbar historik.
+- Bemannade pass kan dras till andra pass i vecka, månad eller tremånadersvy. I utkast byts båda tilldelningarna atomiskt och låses; i utskickade scheman krävs orsak och originalet behålls. Samma byte kan väljas i passdialogen med tangentbord eller på pekskärm. Otillgänglighet, fredagsblockering och dubbelbokning kontrolleras på båda nya datumen. Arkiverade perioder kan inte ändras.
+- Veckonummer följer ISO-veckor, även över årsskiftet, och visas i alla schemavyer samt schema- och städexport.
 - Barn har eget namn, start, slut och befrielselängd. Fyra veckor föreslås från barnstart, 0 stänger av befrielsen. Sista dagen är inkluderad; ett kvarvarande syskon håller familjen aktiv. Flera befrielse- och ledighetsintervall stöds.
 - Utskick fryser ett original med familjeregler och APT. Jourbyten ändrar aktuell bemanning, medan statistik och framtida historisk balans bygger på originalet. Jourskyldig tid räknas utan befrielse; vanlig ledighet minskar inte vikten. Inga historiska underskott skapas för befriad tid. Äldre uppgifter som inte finns i appen räknas inte som importerad historik.
 - Städning planeras mellan RE-dagarna enligt beslutade städfria helger. Ledighet eller barnbefrielse under någon del av helgen hoppar över familjen med bibehållen tur. Styrelsebefrielse från jour påverkar inte städning. RE-extrapass är separata poster med orsak och behåller ordinarie köplats.
@@ -40,6 +42,8 @@ Tester omfattar autentisering, hårda schemavillkor, låsningar, barnstart och s
 - Excel-export innehåller aktuell jour, original, städplan, kö, familjeregler och statistik. Utkast märks. PDF skapas med webbläsarens utskriftsfunktion. Export av familjeregler är privat underlag och ska väljas med omsorg vid manuell delning.
 
 Generatorn är deterministisk och jämför prioriteringarna i beslutad ordning. Det är en heuristik utan garanti om globalt optimalt schema. Kapacitetskontrollen kan bevisa vissa omöjliga 14-dagarsintervall, men garanterar inte att alla övriga underlag är genomförbara.
+
+Avdelningarna är Körsbäret, Päronet och Äpplet. I ett tomt register kan användaren uttryckligen lägga till 40 påhittade testfamiljer med 48 olika barn: 35 jourskyldiga och 5 jourbefriade, med spärrade fredagar för 7 av de jourskyldiga. Inläggningen är versionskontrollerad och spårbar, märker miljön som testdata och vägrar ersätta befintliga familjer. Generering görs därefter separat. Avdelningsnamn kan ändras utan att andra datumregler måste fyllas i; befintliga familjers tillhörighet ändras inte automatiskt.
 
 ## Inloggning och publicering
 

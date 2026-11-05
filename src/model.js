@@ -1,6 +1,7 @@
 import { datesBetween, holidayMap, validDate, within } from './dates.js';
 import { available, familyName, obligation, reviewSchedule } from './planner.js';
 import { cleaningAvailable, generateCleaning } from './cleaning.js';
+import { defaultDepartments, demoFamilies } from './seed.js';
 
 export class AppError extends Error { constructor(message,status=400) {super(message);this.status=status;} }
 const check=(condition,message)=>{if(!condition) throw new AppError(message);};
@@ -20,7 +21,7 @@ export function makePeriod(start,id=crypto.randomUUID()) {
 }
 export function createState(families) {
   const demo=families.length>0;
-  return {schemaVersion:1,families:clone(families),queue:families.map(f=>f.id),periods:[makePeriod('2026-11-01','initial-period')],calendarSettings:{time:'08:00',duration:30,timeZone:'Europe/Stockholm'},cleaningSettings:{autumnRE:demo?'2026-10-10':'',springRE:demo?'2027-05-08':'',reDates:[],breaks:demo?[{start:'2026-12-21',end:'2027-01-06',reason:'Jullov (testdatum)'}]:[],cancelled:[],departments:['Ekorren','Ugglan'],extras:[]},completedExtras:[]};
+  return {schemaVersion:1,families:clone(families),queue:families.map(f=>f.id),periods:[makePeriod('2026-11-01','initial-period')],calendarSettings:{time:'08:00',duration:30,timeZone:'Europe/Stockholm'},cleaningSettings:{autumnRE:demo?'2026-10-10':'',springRE:demo?'2027-05-08':'',reDates:[],breaks:demo?[{start:'2026-12-21',end:'2027-01-06',reason:'Jullov (testdatum)'}]:[],cancelled:[],departments:clone(defaultDepartments),extras:[]},completedExtras:[]};
 }
 export function historyFor(state,period) {
   return state.periods.filter(p=>p.id!==period.id&&p.original&&p.end<period.start).flatMap(p=>Object.entries(p.original.assignments).filter(([,a])=>a.family).map(([key,a])=>({date:key.split(':')[0],level:Number(key.split(':')[1]),family:a.family,apt:p.original.aptDates.includes(key.split(':')[0])&&key.endsWith(':0')})));
@@ -73,6 +74,17 @@ export function applyCommand(previous,command,{actor,now=new Date().toISOString(
   if(period) before=clone(period);
   const draft=()=>check(period?.status==='draft','Endast utkast får ändras på detta sätt.');
   switch(command.type) {
+    case 'demo.seed': {
+      check(state.families.length===0,'Det finns redan familjer. Testdata kan bara läggas in i ett tomt register.');
+      before={families:[],queue:clone(state.queue),cleaningSettings:clone(state.cleaningSettings)};state.families=clone(demoFamilies);state.queue=demoFamilies.map(f=>f.id);state.demoData=true;state.cleaningSettings.departments=clone(defaultDepartments);
+      description='Lade till 40 testfamiljer: 35 jourskyldiga och 5 jourbefriade';
+      return {state,event:{id,scope:'global',type:command.type,actor,at:now,description,before,after:{families:clone(state.families),queue:clone(state.queue),cleaningSettings:clone(state.cleaningSettings)}}};
+    }
+    case 'departments.set': {
+      const departments=(payload.departments??[]).map(v=>text(v,60));check(departments.length>0&&departments.length<=20&&departments.every(Boolean)&&new Set(departments).size===departments.length,'Ange unika avdelningsnamn.');
+      before=clone(state.cleaningSettings);state.cleaningSettings.departments=departments;description='Ändrade avdelningar';
+      return {state,event:{id,scope:'global',type:command.type,actor,at:now,description,before,after:clone(state.cleaningSettings)}};
+    }
     case 'family.save': {
       const old=state.families.find(f=>f.id===payload.family.id);before=old?clone(old):null;
       const family=validatedFamily(payload.family,old?.id??Math.max(0,...state.families.map(f=>f.id))+1);
@@ -153,14 +165,32 @@ export function applyCommand(previous,command,{actor,now=new Date().toISOString(
       period.original={assignments:clone(period.assignments),aptDates:clone(period.aptDates),families:clone(state.families),cleaning:clone(period.cleaning),sentAt:now};period.status='sent';description='Markerade schemat som utskickat och fastställde originalet';break;
     }
     case 'period.swap': {
-      check(period?.status==='sent','Jourbyten görs i utskickade scheman.');check(period.assignments[payload.key],'Passet saknas.');
-      check(text(payload.reason),'Ange orsaken till jourbytet.');
-      const current=period.assignments[payload.key];
-      if(payload.otherKey) {check(payload.otherKey!==payload.key&&period.assignments[payload.otherKey],'Välj ett annat befintligt pass.');const other=period.assignments[payload.otherKey];[current.family,other.family]=[other.family,current.family];}
-      else {check(state.families.some(f=>f.id===payload.family),'Välj en tilldelning.');current.family=payload.family;}
-      const changedDays=[payload.key,payload.otherKey].filter(Boolean).map(key=>key.split(':')[0]);
-      check(!periodWarnings(state,period).some(w=>changedDays.includes(w.date)&&['unavailable','departed','locked','empty'].includes(w.type)),'Bytet ger en otillåten tilldelning eller dubbelbokning.');
-      description=`Registrerade jourbyte: ${text(payload.reason)}`;break;
+      check(period&&['draft','sent'].includes(period.status),'Arkiverade scheman kan inte ändras.');
+      const keys=[payload.key,payload.otherKey].filter(Boolean),closed=new Set(closedDates(period));
+      check(period.status==='sent'||payload.otherKey,'Välj två pass att byta i utkastet.');
+      check(!payload.otherKey||payload.key!==payload.otherKey,'Välj två olika pass.');
+      for(const key of keys) {
+        check(typeof key==='string'&&/^\d{4}-\d{2}-\d{2}:[0-2]$/.test(key),'Ogiltigt pass.');
+        const [day,level]=key.split(':');
+        check(validDate(day)&&day>=period.start&&day<=period.end&&![0,6].includes(new Date(`${day}T00:00:00Z`).getUTCDay())&&!closed.has(day)&&Number(level)<(period.levelOverrides[day]??period.levels),'Bytet måste gälla öppna jourpass i samma period.');
+      }
+      if(period.status==='sent') check(text(payload.reason),'Ange orsaken till jourbytet.');
+      const current=period.assignments[payload.key]??{family:null,locked:false};
+      period.assignments[payload.key]=current;
+      if(payload.otherKey) {
+        const other=period.assignments[payload.otherKey]??{family:null,locked:false};
+        check(current.family!==other.family,'Passen har redan samma tilldelning.');
+        period.assignments[payload.otherKey]=other;
+        [current.family,other.family]=[other.family,current.family];
+        if(period.status==='draft') {current.locked=true;other.locked=true;}
+      } else {check(state.families.some(f=>f.id===payload.family),'Välj en tilldelning.');current.family=payload.family;}
+      for(const key of keys) {
+        const a=period.assignments[key],day=key.slice(0,10),f=state.families.find(f=>f.id===a.family);
+        check(a.family===null||(f&&available(f,day)),'Bytet går inte: en tilldelning är inte tillgänglig på sitt nya datum.');
+        check(!a.family||!Object.entries(period.assignments).some(([k,v])=>k!==key&&k.startsWith(day)&&v.family===a.family),'Bytet skulle ge samma familj flera jourpass samma dag.');
+      }
+      if(period.status==='draft') {period.generated=true;period.approved=[];}
+      description=period.status==='draft'?'Bytte två jourpass i utkastet och låste båda':`Registrerade jourbyte: ${text(payload.reason)}`;break;
     }
     case 'period.archive': check(period,'Perioden saknas.');check(period.status!=='archived','Perioden är redan arkiverad.');period.status='archived';description='Arkiverade schemaperiod';break;
     case 'period.unarchive': check(period?.status==='archived','Perioden är inte arkiverad.');period.status=period.original?'sent':'draft';description='Återöppnade arkiverad period';break;
