@@ -7,25 +7,26 @@
 .view-switch button.selected { background: #e8f0e3; color: #234f42; font-weight: 600; }
 .schedule-facts { display: flex; align-items: center; gap: 18px; font-size: 11px; color: #627361; }
 .schedule-toolbar { font: 21px var(--serif); text-transform: capitalize; }
-.month-overview { display: grid; gap: 18px; }
-.month-panel { border: 1px solid #e0e6db; background: white; border-radius: 9px; overflow: hidden; min-width: 0; }
-.month-panel h2 { font: 22px var(--serif); margin: 0; padding: 18px; text-transform: capitalize; border-bottom: 1px solid #e4e9e2; }
-.calendar-weekdays, .calendar-grid { display: grid; grid-template-columns: 30px repeat(7, minmax(0, 1fr)); }
+.month-overview { display: grid; grid-template-columns: minmax(0, 1fr); gap: 26px; }
+.month-panel { border: 1px solid #e0e6db; background: white; border-radius: 9px; overflow: hidden; min-width: 0; scroll-margin-top: 76px; }
+.month-panel h2 { font: 600 23px var(--serif); margin: 0; padding: 17px 20px; text-transform: capitalize; border-bottom: 1px solid #e4e9e2; }
+.month-scroll { overflow-x: auto; }
+.calendar-weekdays, .calendar-grid { display: grid; grid-template-columns: 30px repeat(7, minmax(0, 1fr)); min-width: 770px; }
 .calendar-weekdays { background: #f5f7f1; }
-.calendar-weekdays span { font-size: 10px; color: #627361; text-align: center; padding: 10px 0; }
-.calendar-day, .calendar-padding { min-height: 135px; padding: 7px; border-top: 1px solid #e8ece4; border-right: 1px solid #e8ece4; }
+.calendar-weekdays span { font-size: 12px; color: #4d624d; text-align: center; padding: 10px 0; }
+.calendar-day, .calendar-padding { min-height: 152px; padding: 8px; border-top: 1px solid #e8ece4; border-right: 1px solid #e8ece4; }
 .calendar-day:nth-child(8n), .calendar-padding:nth-child(8n) { border-right: 0; }
 .calendar-week-number {display:flex;align-items:center;flex-direction:column;padding-top:13px;background:#eef2eb;color:#526b5a;font-size:12px;font-weight:600;border-top:1px solid #e0e6db;border-right:1px solid #e0e6db}
 .calendar-week-number span {font-size:9px;font-weight:400;margin-bottom:3px}
-.calendar-date { display: flex; align-items: center; gap: 4px; min-height: 23px; margin-bottom: 6px; }
-.calendar-date time { font-size: 12px; color: #4f654f; }
-.calendar-date .apt { margin: 0; }
-.calendar-slot { padding: 6px; min-width: 0; font-size: 11px; margin: 4px 0; gap: 2px; }
-.calendar-slot > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.calendar-slot small { font-size: 9px; margin-right: 5px; opacity: .7; }
-.calendar-slot .locked { font-size: 11px; }
+.calendar-date { display: flex; align-items: center; gap: 4px; min-height: 25px; margin-bottom: 5px; }
+.calendar-date time { font-size: 14px; font-weight: 600; color: #405b43; }
+.calendar-date .apt { margin: 0; font-size: 10px; }
+.calendar-slot { padding: 8px; min-width: 0; min-height: 34px; font-size: 14px; margin: 4px 0; gap: 2px; }
+.calendar-slot > span:first-child { overflow: visible; white-space: normal; overflow-wrap: anywhere; }
+.calendar-slot small { display: inline; font-size: 11px; margin-right: 6px; opacity: .7; }
+.calendar-slot .locked { font-size: 13px; }
 .closed-day, .calendar-padding { background: #f8f9f6; }
-.closed-label { font-size: 10px; color: #879183; }
+.closed-label { font-size: 12px; color: #879183; }
 .day-warning { background: #fff0cc; color: #936b20; border-radius: 50%; width: 15px; height: 15px; display: grid; place-items: center; font-size: 10px; font-weight: 700; margin-left: auto; }
 .calendar-legend { border: 0; padding-inline: 0; }
 .calendar-help { font-size: 12px; color: #6d7e68; line-height: 1.8; }
@@ -38,47 +39,25 @@
 .family-rules { border-top: 1px solid #e4e9e2; margin-top: 20px; padding-top: 14px; }
 .family-rules summary { font-size: 13px; color: #234f42; cursor: pointer; }
 @media (max-width: 1000px) {
-  .calendar-day, .calendar-padding { padding: 4px; }
-  .calendar-slot { font-size: 10px; padding: 6px 3px; }
-  .calendar-slot small { display: none; }
   .schedule-facts { gap: 9px; }
 }
 @media (max-width: 760px) {
   .schedule-tools { flex-direction: column; align-items: flex-start; gap: 10px; }
   .schedule-facts { flex-wrap: wrap; }
-  .month-overview { overflow-x: auto; }
-  .month-panel { min-width: 630px; }
+  .month-panel h2 { padding: 15px; font-size: 22px; }
   .schedule-toolbar { font-size: 18px; }
-  .calendar-day, .calendar-padding { min-height: 120px; }
-  .calendar-slot { font-size: 11px; }
   .family-rule-grid { grid-template-columns: 1fr; gap: 0; }
 }
 
-/* Keep full-period calendars readable at every screen width. */
-.three-months { grid-template-columns: minmax(0, 1fr); gap: 26px; overflow: visible; }
+/* The same calendar styling is used for one month and the full period. */
 .period-nav { position: sticky; top: 0; z-index: 1; display: flex; align-items: center; flex-wrap: wrap; gap: 7px; padding: 12px 0; margin-bottom: 12px; background: #f8f9f6; border-bottom: 1px solid #dfe6da; }
 .period-nav > span { font-size: 12px; color: #586f57; margin-right: 6px; }
 .period-nav button { border: 1px solid #d9e2d5; border-radius: 6px; padding: 9px 13px; background: white; color: #234f42; font-size: 13px; text-transform: capitalize; }
 .period-nav button:hover { background: #eaf1e5; }
-.three-months .month-panel { min-width: 0; scroll-margin-top: 76px; }
-.three-months .month-panel h2 { font-size: 24px; padding: 17px 20px; }
-.three-months .month-scroll { overflow-x: auto; }
-.three-months .calendar-weekdays, .three-months .calendar-grid { min-width: 770px; }
-.three-months .calendar-weekdays span { font-size: 12px; color: #4d624d; }
-.three-months .calendar-day, .three-months .calendar-padding { padding: 8px; min-height: 152px; }
-.three-months .calendar-date { min-height: 25px; margin-bottom: 5px; }
-.three-months .calendar-date time { font-size: 14px; font-weight: 600; color: #405b43; }
-.three-months .calendar-slot { font-size: 14px; padding: 8px; min-height: 34px; }
-.three-months .calendar-slot > span:first-child { overflow: visible; white-space: normal; overflow-wrap: anywhere; }
-.three-months .calendar-slot small { display: inline; font-size: 11px; margin-right: 6px; }
-.three-months .calendar-slot .locked { font-size: 13px; }
-.three-months .closed-label { font-size: 12px; }
-.three-months .apt { font-size: 10px; }
 @media (max-width: 760px) {
   .period-nav { gap: 5px; }
   .period-nav > span { flex-basis: 100%; }
   .period-nav button { padding: 9px 10px; font-size: 12px; }
-  .three-months .month-panel h2 { padding: 15px; font-size: 22px; }
 }
 
 button.day-warning { border: 1px solid #e5cb8c; padding: 0; min-width: 21px; width: 21px; height: 21px; font-size: 12px; }
@@ -104,7 +83,6 @@ button.day-warning:hover, button.day-warning:focus-visible { background: #ffe3a0
 .child-row + .child-row { border-top: 1px solid #edf0e9; margin-top: 12px; }
 .child-row [data-remove-child] { grid-column: 1/-1; justify-self: start; }
 .children-editor > p { font-size: 11px; margin-bottom: 0; }
-.calendar-slot > span:first-child { white-space: normal; overflow-wrap: anywhere; }
 @media(max-width:460px) { .child-row { grid-template-columns: minmax(0,1fr); gap: 0; } }
 
 /* Warm, practical preschool workspace. Layout spacing stays generous. */
@@ -138,10 +116,9 @@ nav a.active { background: #e7efe7; color: #285d4b; }
 .stat-symbol svg { width: 23px; height: 23px; }
 .stat:nth-child(2) .stat-symbol { background: #faf4df; color: #8b7433; }
 .stat:nth-child(3) .stat-symbol { background: #edf3f6; color: #54788e; }
-.panel h2, .month-panel h2, .generation-result h2 { font-family: 'Segoe UI', sans-serif; font-size: 21px; font-weight: 600; }
+.panel h2, .generation-result h2 { font-family: 'Segoe UI', sans-serif; font-size: 21px; font-weight: 600; }
 .panel-head p { font-size: 12px; }
 .schedule-toolbar { font: 600 20px 'Segoe UI', sans-serif; }
-.three-months .month-panel h2 { font-size: 23px; }
 .note-card h3, .capacity-explanation h3 { font: 600 18px/1.4 'Segoe UI', sans-serif; }
 .note-card p { font-size: 12px; }
 .note-card.tinted { background: #eff4ea; }
