@@ -10,6 +10,10 @@
     "deploy": "wrangler deploy --env=\"\""
   },
   "devDependencies": {
+    "esbuild": "0.28.2",
     "wrangler": "4.156.0"
+  },
+  "dependencies": {
+    "fflate": "0.8.3"
   }
 }

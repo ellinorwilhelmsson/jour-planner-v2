@@ -145,3 +145,19 @@ Detta är ett fristående kravunderlag för Jourplanner 2. Fortsatt specificerin
 Beslut 1 november 2026: börja med en klickbar prototyp med påhittade testdata för familjer, jourschema och städkö. Ändringar i denna version finns endast under det aktuella besöket och sparas inte gemensamt. Exempelschemat är inte resultatet av den färdiga fördelningsalgoritmen. Skarpa familjeuppgifter, gemensam lagring, kalenderkoppling och utskick ingår inte i prototypen.
 
 Beslut 4 november 2026: behåll den ursprungliga varmare designen. Schemat ska kunna visas som vecka, månad med kalenderrutor och hela en tremånadersperiod. En första lokal jourgenerator ska använda beslutad prioritetsordning, kunna fördela om olåsta pass och visa avvikelser. Verklig historik saknas i prototypen; äldre rättvisa kan därför inte verifieras där.
+
+
+## Fortsatta beslut och implementationsläge 4–5 november 2026
+
+- Gemensam sparning i Cloudflare D1 är godkänd. Projektet är ideellt och ska kosta 0 kr; inga betalda planer eller tillägg får aktiveras. Användaren bekräftade Workers Free.
+- Helgstädning planeras mellan höstens och vårens RE-dag, med uppehåll på RE-helger. En städhelg är också fri om fredag–måndag innehåller svensk röd dag eller afton, under registrerat jullov eller stängning samt efter en helt stängd vardagsvecka.
+- Om ledighet eller barnbefrielse berör någon del av lördag–söndag hoppas familjen över och behåller sin tur.
+- Google Kalender ska använda 30 minuter långa händelser för att visa vem som kan ringas in. Föreslagen starttid från användaren är 08.00. APT-arbetets start 16.00 ska fortfarande framgå av texten. Kalenderkopplingen är ännu inte implementerad eller ansluten.
+
+Nu implementerat för kontroll: D1-sparning med revisionskonflikter, verifierad aktör och atomisk historik; sparade tremånadersperioder; datumregler och journivåer per datum; barnstart med justerbar befrielse; fastställt original och jourbyten; periodstatistik från originalet; städgenerering, RE-extrapass och köflytt vid utskick; utkaståterställning; Excel-export samt utskrift till PDF.
+
+För denna version är återställningen begränsad till periodens utkast. Gemensamt familjeunderlag, städkö och andra perioder behålls. Ändringar i gemensamma uppgifter registreras i en separat gemensam historik. Städplanens familjeregler och kö kontrolleras på nytt vid fastställande. En ändring i underlaget kräver ny uttrycklig städgenerering. Köflytt sker inte vid förhandsvisning.
+
+En inställd framtida städhelg i senast fastställda städperiod flyttar uppdrag inom perioden; uppdrag som inte får plats får förtur i nästa period och förbrukar inte en ny ordinarie tur. Automatisk flytt genom flera redan fastställda perioder stöds ännu inte. Full läsårsstatistik och äldre import återstår också. Detta implementationsläge ersätter inte kvarvarande specifikationsfrågor ovan.
+
+Skarpa familjeuppgifter ska vänta tills appens separata MFA-krav har slutförts och verifierats. Den registrerade autentiseringsappen bevisar inte i sig att MFA krävs för varje inloggning till appen.

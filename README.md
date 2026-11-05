@@ -1,49 +1,64 @@
 # Jourplaneraren
 
-Klickbar prototyp med påhittade familjer, exempelschema och städkö. Ändringar finns bara i den öppna sidans minne och återställs vid omladdning. En första jourgenerator för tremånadersperioder ingår. Ingen databas, kalenderkoppling eller utskick ingår.
+Privat planering av jour och helgstädning för en förskola. Cloudflare Workers levererar appen, Cloudflare Access verifierar personliga konton och D1 sparar gemensamt underlag och ändringshistorik. Ingen GitHub-integration behövs i Cloudflare.
 
-## Utveckla
+## Kostnadsram
+
+Projektet ska kosta **0 kr**. Användaren bekräftade Workers **Free** den 4 november 2026. Aktivera aldrig Workers Paid, betalda tillägg, betalda externa tjänster eller en köpt domän inom denna uppgift. Befintlig `workers.dev`-adress används. D1-behörigheten ändrar inte abonnemanget. Kontots gränser delas med andra appar i samma privata konto; andra appar ska inte ändras.
+
+D1 Free stoppar databasfrågor när gratisgränsen nås. Workers Free har också en daglig anropsgräns och en snäv CPU-gräns. Schemagenerering och Excel-export körs därför i webbläsaren; servern validerar och sparar förslaget med versionskontroll. Om gratisnivån inte räcker ska lösningen anpassas, inte uppgraderas automatiskt. Se [D1-priser](https://developers.cloudflare.com/d1/platform/pricing/) och [Workers-gränser](https://developers.cloudflare.com/workers/platform/limits/).
+
+## Utveckla och kontrollera
 
 Node.js 24 och npm behövs.
 
 ```sh
 npm ci
+npx wrangler d1 migrations apply jourplaneraren-local --env local --local
 npm run dev
 ```
 
-Öppna den lokala URL som Wrangler visar. `local` använder Cloudflares lokala Access-simulering med `demo@example.com`. Den inställningen gäller endast `wrangler dev`, inte publicerade Workers. Använd aldrig verkligt familjeunderlag i prototypen.
+Den lokala databasen innehåller påhittade familjer. Omladdning behåller ändringarna. Produktionens databas startar utan familjeuppgifter, RE-datum eller testlov; fyll i underlaget innan generering. Lokala testdata kopieras aldrig automatiskt dit. Access-simuleringen med `demo@example.com` finns bara i `local`-miljön.
 
 ```sh
 npm run check
 npm run build
 ```
 
-## Publicera i det egna Cloudflare-kontot
+Tester omfattar autentisering, hårda schemavillkor, låsningar, barnstart och slut, D1-transaktioner med verklig SQLite, samtidig redigering, revisionskonflikter, återställning, original vid jourbyte, historisk befrielse, städregler, RE-extrapass och Excel-struktur.
 
-Använd officiella Wrangler och återanvänd befintlig inloggning efter kontroll med `npx wrangler whoami`. På Windows sparas OAuth krypterat med nyckeln i Windows Credential Manager (`--use-keyring`). Om inloggning krävs, kör kommandot nedan, godkänn i webbläsaren och fortsätt samma session. Lägg aldrig token eller klienthemligheter i Git eller kommandoradsargument.
+## Datamodell och arbetsflöde
+
+- Ett litet gemensamt JSON-underlag lagras i en D1-rad. Uppdatering och historikhändelse skrivs atomiskt. Varje sparning kräver aktuell revision; en konflikt skriver aldrig över en senare ändring. Historiken innehåller serververifierad aktör, tid samt före- och eftervärden.
+- Perioder omfattar tre månader och kan skapas, väljas och arkiveras. Datumregler stödjer två/tre jourer, avvikande jourantal, svenska röda dagar/aftnar, stängningar och APT. Utskick kräver ett giltigt APT-datum per öppen månad och rättade hårda fel. Intervallavvikelser godkänns uttryckligen.
+- Manuella jourändringar låses. Olåsta pass fördelas bara om genom uttrycklig generering. Även låsta pass som blivit inaktiva kan tas bort uttryckligen med spårbar historik.
+- Barn har eget namn, start, slut och befrielselängd. Fyra veckor föreslås från barnstart, 0 stänger av befrielsen. Sista dagen är inkluderad; ett kvarvarande syskon håller familjen aktiv. Flera befrielse- och ledighetsintervall stöds.
+- Utskick fryser ett original med familjeregler och APT. Jourbyten ändrar aktuell bemanning, medan statistik och framtida historisk balans bygger på originalet. Jourskyldig tid räknas utan befrielse; vanlig ledighet minskar inte vikten. Inga historiska underskott skapas för befriad tid. Äldre uppgifter som inte finns i appen räknas inte som importerad historik.
+- Städning planeras mellan RE-dagarna enligt beslutade städfria helger. Ledighet eller barnbefrielse under någon del av helgen hoppar över familjen med bibehållen tur. Styrelsebefrielse från jour påverkar inte städning. RE-extrapass är separata poster med orsak och behåller ordinarie köplats.
+- En genererad städplan flyttar inte kön. Vid utskick kontrolleras att familjeregler, kö och städregler fortfarande motsvarar förslaget; därefter flyttas kön. Planer med städning fastställs i datumordning. En inställd framtida städhelg flyttar berörda uppdrag framåt; det som inte får plats har förtur i nästa period. Senare redan fastställda städplaner måste hanteras först.
+- Utkast kan återställas till en sparad tidigare periodversion. Gemensamma familjer, kö, andra perioder och kalenderbaslinje återställs inte. Återställning är en ny historikhändelse. Utskickade perioder ändras genom byten.
+- Excel-export innehåller aktuell jour, original, städplan, kö, familjeregler och statistik. Utkast märks. PDF skapas med webbläsarens utskriftsfunktion. Export av familjeregler är privat underlag och ska väljas med omsorg vid manuell delning.
+
+Generatorn är deterministisk och jämför prioriteringarna i beslutad ordning. Det är en heuristik utan garanti om globalt optimalt schema. Kapacitetskontrollen kan bevisa vissa omöjliga 14-dagarsintervall, men garanterar inte att alla övriga underlag är genomförbara.
+
+## Inloggning och publicering
+
+Återanvänd Wranglers inloggning och stödda tysta förnyelse. På Windows används krypterad cache med nyckel i Windows Credential Manager. Vid verkligt autentiseringsfel: godkänn den pågående enhetsinloggningen, inte en ny parallell session. Lägg aldrig token, klienthemligheter eller familjedata i Git eller kommandoradsargument.
 
 ```sh
-npx wrangler login --device --use-keyring --scopes account:read user:read workers:write workers_scripts:write
+npx wrangler login --device --use-keyring --scopes account:read user:read workers:write workers_scripts:write d1:write
+npx wrangler d1 migrations apply jourplaneraren --remote
+npm run deploy
 ```
 
-Utöka inte till alla Wranglers standardbehörigheter bara för att `whoami` visar en varning om saknade scopes. Prototypen använder varken KV, D1, Pages eller zonrutter.
+Worker `jourplaneraren` och dess D1-databas finns i privat konto `7a8e6db3082a866ded1d858dd40d495a`. `scripts/cloudflare-status.mjs` gör enbart läsningar via Wranglers dokumenterade `auth token --json`; token fångas i privat processminne, skickas endast till Cloudflares API och skrivs aldrig ut. Fakturerings-API kräver separat behörighet som inte begärts; gratisplanen bekräftades av användaren.
 
-`npm run deploy` publicerar Worker `jourplaneraren` i konto `7a8e6db3082a866ded1d858dd40d495a`. Den nekar alla anrop tills Worker-level Cloudflare Access har konfigurerats. Inget GitHub-integrationskonto krävs.
+Worker-koden kräver verifierad `ctx.access` och exakt mejllista (`ALLOWED_EMAILS`, med `ALLOWED_EMAIL` som bakåtkompatibelt alternativ). HTTP-identitetsheaders godtas inte. Alla frontendfiler levereras genom samma skyddade Worker. Skriv-API kräver samma origin och JSON. Den andra användarens mejladress är fortfarande uppskjuten enligt överenskommelse; ändra både Access-policy och serverns tillåtelselista när den ska läggas till.
 
-Under Workers & Pages → Jourplaneraren → Access: skydda **All traffic**, tillåt endast den avsedda personliga mejladressen och använd One-time PIN. I Access-applikationens MFA-inställningar krävs **Authenticator application**. Tillåt inte Everyone eller en hel mejldomän. App Launchers separat tillåtna inloggning räcker inte som skydd för Workern.
+Worker-level Access **All traffic** är aktiverat för avsedd personlig mejladress och mejlkod. Autentiseringsappen är registrerad, men **appspecifikt MFA-krav behöver fortfarande slutföras och verifieras innan skarpa familjeuppgifter läggs in**. Ändra inte globala MFA-regler för andra appar. Kontrollera anonymt att `/`, `/client.js` och `/api/state` leder till Access eller nekas, och därefter avsedd inloggning och otillåtet konto. Se [Workers Access](https://developers.cloudflare.com/workers/configuration/cloudflare-access/) och [Independent MFA](https://developers.cloudflare.com/cloudflare-one/access-controls/access-settings/independent-mfa/).
 
-Kontrollera anonymt att både `/`, `/client.js` och `/api/me` leder till Access eller nekas. Testa därefter tillåten inloggning med mejlkod och registrerad MFA. Kontrollera att ett otillåtet konto nekas.
+## Kvarvarande arbete
 
-Worker-koden använder Cloudflares verifierade `ctx.access` och en exakt mejllista; förfalskade HTTP-identitetsheaders godtas inte. Frontendfiler levereras genom Workern, utan Static Assets-bindning, eftersom Cloudflares interna asset-router inte vidarebefordrar `ctx.access`. Ingen produktionsinställning för att kringgå autentisering finns.
+Google Kalender-publicering och OAuth-koppling återstår att implementera och ansluta. Reserverade tabeller och ett gransknings-API innebär inte att publicering fungerar. Beslutad riktning är 30-minutershändelser kl. 08.00 och APT-text om 16.00; Google-behörigheter ska begränsas till appens egen kalender. Ingen extern kalender eller e-post ändras från nuvarande version.
 
-Referenser: [Access för Workers](https://developers.cloudflare.com/workers/configuration/cloudflare-access/), [Independent MFA](https://developers.cloudflare.com/cloudflare-one/access-controls/access-settings/independent-mfa/).
-
-## Fortsatt arbete
-
-Se FUNCTIONAL_SPEC.md. Kalendern visar vecka, månad eller tre månader. Generera schema fördelar jourpass över öppna vardagar, behåller låsta pass och lämnar obemannat när tillgängliga familjer saknas. Familjereglerna stödjer start/slut, jourbefrielse, ledighet och spärrade veckodagar. Formuläret stödjer ett befrielse- och ett ledighetsintervall; beräkningsmodellen stödjer flera. Datumregler ändras under Period och datum. Helgdagar och lov måste kontrolleras och registreras; de få förifyllda datumen är testunderlag.
-
-Generatorn använder kronologisk tilldelning med lexikografisk prioritering: intervall jour 1–2, månadsbalans totalt och per nivå, APT, intervall med jour 3, veckodagsvariation och historisk balans. Det är en första heuristik, utan garanti om globalt optimalt schema. Intervallavvikelser, omöjlig bemanning och otillåtna låsningar visas för manuell granskning. Ändrade familjeregler eller manuella pass gör kontrollerna inaktuella tills användaren väljer Kontrollera igen eller nästa uttryckliga generering. Kontrollera igen granskar befintliga tilldelningar utan att flytta pass. Varningsmarkeringar visar meddelanden vid hover, fokus och klick; varningslistan kan öppna berört datum. En separat kapacitetskontroll förklarar när tillgängliga familjer är för få för att 14 dagars primärjourintervall överhuvudtaget ska vara möjligt. Den kontrollen bevisar vissa omöjliga fall men garanterar inte att övriga underlag är genomförbara.
-
-Inget tidigare originalschema är importerat och historisk utjämning är därför inte verifierad med verkligt underlag. Automatisk fyra veckors befrielse vid barnstart, publicering/originalschema, jourbyten, avvikande journivå per dag, generering av helgstädning och gemensam lagring återstår. Städkön är fortfarande en manuell prototyp. Ändringar sparas endast i sidans minne.
-
-Barn registreras var för sig med namn och valfritt slutdatum (sista dagen inkluderad). När sista barnet har slutat upphör jourtillgängligheten och jourskyldig tid räknas bara fram till dess. Ett syskon utan slutdatum håller familjen aktiv. Befintliga tilldelningar bevaras och flaggas om de ligger efter sista barnets slutdatum; olåsta pass kan fördelas om och låsta pass kräver manuell ändring/upplåsning. Namn visas som barnens namn och efternamn; kalendern visar kvarvarande barn för respektive datum.
+Import av äldre statistik och äldre familjekopplingar, full läsårsstatistik och vidare verksamhetsdetaljer i FUNCTIONAL_SPEC.md återstår. Statistikvyn visar nu vald period. Appen skickar inte mejl; markera som utskickat efter eget manuellt utskick. Inga betalda tjänster ska införas för återstående funktioner.

@@ -6,13 +6,43 @@
   "compatibility_date": "2026-10-30",
   "workers_dev": true,
   "preview_urls": false,
-  "build": { "command": "node scripts/build.mjs" },
-  "vars": { "ALLOWED_EMAIL": "ellinor.mauritzon@gmail.com" },
+  "build": {
+    "command": "node scripts/build.mjs"
+  },
+  "vars": {
+    "ALLOWED_EMAIL": "ellinor.mauritzon@gmail.com"
+  },
   "env": {
     "local": {
       "name": "jourplaneraren-local",
-      "vars": { "ALLOWED_EMAIL": "demo@example.com" },
-      "access": { "dev": { "aud": "local-demo", "identity": { "email": "demo@example.com" } } }
+      "vars": {
+        "ALLOWED_EMAIL": "demo@example.com",
+        "LOCAL_DEMO": "true"
+      },
+      "access": {
+        "dev": {
+          "aud": "local-demo",
+          "identity": {
+            "email": "demo@example.com"
+          }
+        }
+      },
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "jourplaneraren-local",
+          "database_id": "00000000-0000-0000-0000-000000000002",
+          "migrations_dir": "migrations"
+        }
+      ]
     }
-  }
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "jourplaneraren",
+      "database_id": "17b2bc25-47bb-4a38-8f91-cff793ac93e7",
+      "migrations_dir": "migrations"
+    }
+  ]
 }

@@ -1,3 +1,4 @@
+import { addDays } from './dates.js';
 export const dateKey = date => date.toISOString().slice(0, 10);
 const asDate = value => new Date(`${value}T00:00:00Z`);
 const inRange = (date, range) => date >= range.start && date <= range.end;
@@ -6,25 +7,28 @@ export function lastChildEnd(family) {
   return family.childRecords.map(child => child.end).sort().at(-1);
 }
 export function familyName(family, date) {
-  const remaining = family.childRecords?.filter(child => !date || !child.end || date <= child.end);
+  const remaining = family.childRecords?.filter(child => !date || ((!child.start || date>=child.start) && (!child.end || date <= child.end)));
   const children = family.childRecords
     ? new Intl.ListFormat('sv', { type: 'conjunction' }).format((remaining.length ? remaining : family.childRecords).map(child => child.name))
     : family.children;
   return [children, family.name].filter(Boolean).join(' ');
 }
-const active = (family, date) => (!family.start || date >= family.start) && (!family.end || date <= family.end)
-  && (!family.childRecords || family.childRecords.some(child => !child.end || date <= child.end));
-const exempt = (family, date) => family.status === 'Jourbefriad' || (family.exemptions ?? []).some(range => inRange(date, range));
+export const familyActive = (family, date) => (!family.start || date >= family.start) && (!family.end || date <= family.end)
+  && (!family.childRecords || family.childRecords.some(child => (!child.start || date >= child.start) && (!child.end || date <= child.end)));
+export function childExempt(family,date) {
+  return (family.childRecords??[]).some(child=>child.start&&Number(child.exemptionWeeks??4)>0&&date>=child.start&&date<=addDays(child.start,Number(child.exemptionWeeks??4)*7-1));
+}
+const exempt = (family, date) => family.status === 'Jourbefriad' || childExempt(family,date) || (family.exemptions ?? []).some(range => inRange(date, range));
 export function periodDays(start, end) {
   const days = [];
   for (let date = asDate(start); date <= asDate(end); date.setUTCDate(date.getUTCDate() + 1)) days.push(dateKey(date));
   return days;
 }
 export function obligation(family, start, end) {
-  return periodDays(start, end).filter(date => active(family, date) && !exempt(family, date)).length;
+  return periodDays(start, end).filter(date => familyActive(family, date) && !exempt(family, date)).length;
 }
 export function available(family, date) {
-  return active(family, date) && !exempt(family, date)
+  return familyActive(family, date) && !exempt(family, date)
     && !(family.leave ?? []).some(range => inRange(date, range))
     && !(family.blockedWeekdays ?? []).includes(asDate(date).getUTCDay());
 }
@@ -36,7 +40,7 @@ const compare = (a, b) => {
 
 // Deterministic, chronological allocation. Priorities are compared in order,
 // rather than blended into weights that could override a higher-priority rule.
-export function generateSchedule({ start, end, families, levels = 3, closed = [], apt = [], existing = {}, history = [] }) {
+export function generateSchedule({ start, end, families, levels = 3, closed = [], apt = [], existing = {}, history = [], levelOverrides = {} }) {
   const allDays = periodDays(start, end);
   const working = allDays.filter(date => ![0, 6].includes(asDate(date).getUTCDay()) && !closed.includes(date));
   const result = {};
@@ -57,7 +61,7 @@ export function generateSchedule({ start, end, families, levels = 3, closed = []
   }
   for (const date of working) {
     const weights = monthWeights.get(date.slice(0, 7));
-    for (let level = 0; level < levels; level++) {
+    for (let level = 0; level < (levelOverrides[date] ?? levels); level++) {
       const key = `${date}:${level}`;
       if (result[key]) continue;
       const candidates = families.filter(f => available(f, date)
@@ -70,12 +74,12 @@ export function generateSchedule({ start, end, families, levels = 3, closed = []
         const primarySpacing = level < 2 ? near.filter(record => record.level < 2).reduce((sum, r) => sum + 14 - gap(r.date, date), 0) : 0;
         // Month balance considers overall counts, then the individual duty level.
         const monthly = [monthRecords.length / weight, monthRecords.filter(r => r.level === level).length / weight];
-        const aptBalance = apt.includes(date) && level === 0 ? own.filter(r => r.apt).length / weight : 0;
+        const aptBalance = apt.includes(date) && level === 0 ? f.aptHistoryBalance!==undefined?f.aptHistoryBalance+own.filter(r=>r.date>=start&&r.apt).length:own.filter(r => r.apt).length / weight : 0;
         const thirdSpacing = near.filter(record => level === 2 || record.level === 2).reduce((sum, r) => sum + 14 - gap(r.date, date), 0);
         const weekdays = own.filter(r => asDate(r.date).getUTCDay() === asDate(date).getUTCDay()).length;
         // Historical load is an imbalance relative to expected allocation;
         // missing history starts at zero, never fabricating past obligations.
-        const historical = (f.historyBalance ?? 0) + own.filter(r => r.date < start).length;
+        const historical = f.historyBalance ?? own.filter(r => r.date < start).length;
         return [primarySpacing, ...monthly, aptBalance, thirdSpacing, weekdays, historical, f.id];
       };
       candidates.sort((a, b) => compare(score(a), score(b)));
@@ -88,16 +92,16 @@ export function generateSchedule({ start, end, families, levels = 3, closed = []
       records.push({ date, level, family: chosen.id, apt: apt.includes(date) && level === 0 });
     }
   }
-  return { assignments: result, warnings: reviewSchedule({ start, end, families, levels, closed, assignments: result }) };
+  return { assignments: result, warnings: reviewSchedule({ start, end, families, levels, closed, levelOverrides, assignments: result }) };
 }
 
-export function intervalCapacity({start, end, families, levels = 3, closed = []}) {
+export function intervalCapacity({start, end, families, levels = 3, closed = [], levelOverrides = {}}) {
   const dates = periodDays(start,end);
   let worst = null;
   for (let i=0;i<dates.length;i++) {
     const window=dates.slice(i,i+14);
     const working=window.filter(date=>![0,6].includes(asDate(date).getUTCDay())&&!closed.includes(date));
-    const required=working.length*Math.min(levels,2);
+    const required=working.reduce((sum,date)=>sum+Math.min(levelOverrides[date]??levels,2),0);
     const availableCount=families.filter(f=>working.some(date=>available(f,date))).length;
     if(required>availableCount && (!worst || required-availableCount>worst.required-worst.available)) {
       worst={start:window[0],end:window.at(-1),required,available:availableCount};
@@ -106,11 +110,11 @@ export function intervalCapacity({start, end, families, levels = 3, closed = []}
   return worst;
 }
 
-export function reviewSchedule({start,end,families,levels=3,closed=[],assignments}) {
+export function reviewSchedule({start,end,families,levels=3,closed=[],levelOverrides={},assignments}) {
   const warnings=[];
   const current=[];
   const working=periodDays(start,end).filter(date=>![0,6].includes(asDate(date).getUTCDay())&&!closed.includes(date));
-  for(const date of working) for(let level=0;level<levels;level++) {
+  for(const date of working) for(let level=0;level<(levelOverrides[date]??levels);level++) {
     if(!assignments[`${date}:${level}`]?.family) warnings.push({type:'empty',date,message:`Jour ${level+1} saknar tillgänglig familj.`});
   }
   for(const [key,value] of Object.entries(assignments)) {
@@ -119,7 +123,7 @@ export function reviewSchedule({start,end,families,levels=3,closed=[],assignment
     const f=families.find(item=>item.id===value.family);
     current.push({date,level,family:value.family});
     if (f && lastChildEnd(f) && date > lastChildEnd(f)) warnings.push({type:'departed',date,family:f.id,message:`${familyName(f)} har jour ${level+1} efter sista barnets slutdatum (${lastChildEnd(f)}). Byt tilldelning${value.locked?' eller lås upp passet och fördela om':''}.`});
-    else if(!working.includes(date)||level>=levels||!f||!available(f,date)) warnings.push({type:value.locked?'locked':'unavailable',date,message:`Jour ${level+1} strider mot aktuellt underlag${value.locked?' och är låst':''}. Korrigera tilldelningen.`});
+    else if(!working.includes(date)||level>=(levelOverrides[date]??levels)||!f||!available(f,date)) warnings.push({type:value.locked?'locked':'unavailable',date,message:`Jour ${level+1} strider mot aktuellt underlag${value.locked?' och är låst':''}. Korrigera tilldelningen.`});
   }
   for (const f of families) {
     const own = current.filter(r => r.family === f.id).sort((a, b) => a.date.localeCompare(b.date));
